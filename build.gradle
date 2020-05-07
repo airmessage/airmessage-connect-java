@@ -1,0 +1,21 @@
+plugins {
+    id 'application'
+}
+
+group 'org.example'
+version '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation group: 'junit', name: 'junit', version: '4.12'
+
+    implementation 'org.java-websocket:Java-WebSocket:1.4.1'
+    implementation 'org.msgpack:msgpack-core:0.8.20'
+
+    implementation 'com.google.firebase:firebase-admin:6.12.2'
+}
+
+mainClassName = 'me.tagavari.airmessageconnect.Main'
