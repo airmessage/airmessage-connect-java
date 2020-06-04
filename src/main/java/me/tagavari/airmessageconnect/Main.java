@@ -9,6 +9,7 @@ import org.java_websocket.server.WebSocketServer;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
@@ -77,6 +78,10 @@ public class Main {
 	}
 	
 	public static String connectionToString(WebSocket connection) {
-		return connection.getRemoteSocketAddress().getAddress().getHostAddress() + " (" + connection.getRemoteSocketAddress().getAddress().getHostName() + ")";
+		InetSocketAddress remoteSocketAddress = connection.getRemoteSocketAddress();
+		if(remoteSocketAddress == null) return "unknown";
+		InetAddress address = remoteSocketAddress.getAddress();
+		if(address == null) return "unknown";
+		return address.getHostAddress() + " (" + address.getHostName() + ")";
 	}
 }

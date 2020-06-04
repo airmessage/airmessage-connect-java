@@ -54,13 +54,19 @@ public class ClientData {
 	
 	public static class Type {
 		private final String groupID;
+		private final String fcmToken;
 		
-		public Type(String groupID) {
+		public Type(String groupID, String fcmToken) {
 			this.groupID = groupID;
+			this.fcmToken = fcmToken;
 		}
 		
 		public String getGroupID() {
 			return groupID;
+		}
+		
+		public String getFCMToken() {
+			return fcmToken;
 		}
 	}
 }

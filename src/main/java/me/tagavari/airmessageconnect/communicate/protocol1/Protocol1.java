@@ -1,19 +1,36 @@
 package me.tagavari.airmessageconnect.communicate.protocol1;
 
+import com.google.api.core.ApiFuture;
+import com.google.api.core.ApiFutureCallback;
+import com.google.api.core.ApiFutures;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseAuthException;
 import com.google.firebase.auth.FirebaseToken;
-import me.tagavari.airmessageconnect.*;
+import com.google.firebase.messaging.BatchResponse;
+import com.google.firebase.messaging.FirebaseMessaging;
+import com.google.firebase.messaging.MulticastMessage;
+import com.google.firebase.messaging.SendResponse;
+import me.tagavari.airmessageconnect.ClientData;
+import me.tagavari.airmessageconnect.Main;
+import me.tagavari.airmessageconnect.SharedData;
+import me.tagavari.airmessageconnect.StorageUtils;
 import me.tagavari.airmessageconnect.communicate.Protocol;
 import me.tagavari.airmessageconnect.document.DocumentUser;
+import me.tagavari.airmessageconnect.structure.ConnectionGroup;
 import org.java_websocket.WebSocket;
 import org.java_websocket.drafts.Draft;
 import org.java_websocket.exceptions.InvalidDataException;
 import org.java_websocket.framing.CloseFrame;
 import org.java_websocket.handshake.ClientHandshake;
 
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.logging.Level;
@@ -39,6 +56,34 @@ public class Protocol1 implements Protocol {
 					
 					//Sending the data to the server
 					socket.send(socket.<ClientData>getAttachment().getProtocol().sendServerProxy(clientData.getConnectionID(), data));
+					
+					break;
+				}
+				case NHT.nhtClientAddFCMToken: {
+					//Client-only
+					if(clientData.isServer()) break;
+					
+					//Reading the token
+					byte[] data = new byte[bytes.remaining()];
+					bytes.get(data);
+					String token = new String(data, StandardCharsets.ISO_8859_1);
+					
+					//Adding the token
+					clientData.getConnectionGroup().addClientFCMToken(token);
+					
+					break;
+				}
+				case NHT.nhtClientRemoveFCMToken: {
+					//Client-only
+					if(clientData.isServer()) break;
+					
+					//Reading the token
+					byte[] data = new byte[bytes.remaining()];
+					bytes.get(data);
+					String token = new String(data, StandardCharsets.ISO_8859_1);
+					
+					//Removing the token
+					clientData.getConnectionGroup().removeClientFCMToken(token);
 					
 					break;
 				}
@@ -85,10 +130,53 @@ public class Protocol1 implements Protocol {
 					byte[] data = new byte[bytes.remaining()];
 					bytes.get(data);
 					
+					//Getting the server' connection group
+					ConnectionGroup connectionGroup = clientData.getConnectionGroup();
+					
 					//Sending the data to all clients
-					for(WebSocket socket : clientData.getConnectionGroup().getAllConnectionsClient()) {
+					for(WebSocket socket : connectionGroup.getAllConnectionsClient()) {
 						socket.send(socket.<ClientData>getAttachment().getProtocol().sendClientProxy(data));
 					}
+					
+					break;
+				}
+				case NHT.nhtServerNotifyPush: {
+					//Server-only
+					if(!clientData.isServer()) break;
+					
+					//Getting the server' connection group
+					ConnectionGroup connectionGroup = clientData.getConnectionGroup();
+					
+					//Sending a firebase message
+					List<String> tokens = new ArrayList<>(connectionGroup.getClientFCMTokenList());
+					if(tokens.isEmpty()) break;
+					MulticastMessage message = MulticastMessage.builder()
+							.addAllTokens(tokens)
+							.build();
+					ApiFuture<BatchResponse> responseFuture = FirebaseMessaging.getInstance().sendMulticastAsync(message);
+					ApiFutures.addCallback(responseFuture, new ApiFutureCallback<BatchResponse>() {
+						@Override
+						public void onFailure(Throwable throwable) {
+							throwable.printStackTrace();
+						}
+						
+						@Override
+						public void onSuccess(BatchResponse response) {
+							if(response.getFailureCount() > 0) {
+								//Finding failed responses
+								List<SendResponse> responseList = response.getResponses();
+								for(int i = 0; i < responseList.size(); i++) {
+									if(responseList.get(i).isSuccessful()) continue;
+									
+									//The order of responses corresponds to the order of the registration tokens
+									String failedToken = tokens.get(i);
+									
+									//Removing failed tokens
+									connectionGroup.removeClientFCMToken(failedToken);
+								}
+							}
+						}
+					}, MoreExecutors.directExecutor());
 					
 					break;
 				}
@@ -102,13 +190,16 @@ public class Protocol1 implements Protocol {
 	public void handleHandshake(WebSocket conn, Draft draft, ClientHandshake request, Map<String, String> cookieMap) throws InvalidDataException {
 		//Reading parameter data
 		boolean isServer;
-		String installationID, idToken, userID;
+		String installationID, idToken, userID, fcmToken;
 		try {
 			isServer = Boolean.parseBoolean(cookieMap.get("isServer"));
 			installationID = cookieMap.get("installationID");
 			idToken = cookieMap.get("idToken");
 			userID = cookieMap.get("userID");
-		} catch(NumberFormatException exception) {
+			if(userID != null) userID = URLDecoder.decode(userID, "UTF-8");
+			fcmToken = cookieMap.get("fcmToken");
+			if(fcmToken != null) fcmToken = URLDecoder.decode(fcmToken, "UTF-8");
+		} catch(NumberFormatException | UnsupportedEncodingException exception) {
 			Main.getLogger().log(Level.WARNING, "Rejecting handshake (bad request format) from client " + Main.connectionToString(conn));
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			throw new InvalidDataException(CloseFrame.PROTOCOL_ERROR);
@@ -126,7 +217,7 @@ public class Protocol1 implements Protocol {
 				if(idToken != null) {
 					//Failing if a user ID was provided
 					if(userID != null) {
-						Main.getLogger().log(Level.WARNING, "Rejecting handshake (user ID provided) from client " + Main.connectionToString(conn));
+						Main.getLogger().log(Level.WARNING, "Rejecting handshake (user ID provided - " + userID + ") from client " + Main.connectionToString(conn));
 						throw new InvalidDataException(CloseFrame.PROTOCOL_ERROR);
 					}
 					
@@ -169,7 +260,7 @@ public class Protocol1 implements Protocol {
 					DocumentUser documentUser = StorageUtils.instance().getDocumentUser(userID);
 					
 					//Rejecting if this is installation ID out-of-date
-					if(!installationID.equals(documentUser.installationID)) {
+					if(documentUser == null || !installationID.equals(documentUser.installationID)) {
 						Main.getLogger().log(Level.WARNING, "Rejecting handshake (token refresh) from client " + Main.connectionToString(conn));
 						throw new InvalidDataException(SharedData.closeCodeServerTokenRefresh);
 					}
@@ -179,9 +270,15 @@ public class Protocol1 implements Protocol {
 					if(!thisRelayID.equals(documentUser.relayID)) StorageUtils.instance().updateRegisteredServerRelayID(userID, thisRelayID);
 				}
 			} else {
-				//Validating the ID token (and failing if a user UID was provided)
-				if(idToken == null || userID != null) {
+				//Failing if a user ID was provided
+				if(userID != null) {
 					Main.getLogger().log(Level.WARNING, "Rejecting handshake (user ID provided - " + userID + ") from client " + Main.connectionToString(conn));
+					throw new InvalidDataException(CloseFrame.PROTOCOL_ERROR);
+				}
+				
+				//Validating the ID token (and failing if a user UID was provided)
+				if(idToken == null) {
+					Main.getLogger().log(Level.WARNING, "Rejecting handshake (no ID token provided) from client " + Main.connectionToString(conn));
 					throw new InvalidDataException(CloseFrame.PROTOCOL_ERROR);
 				}
 				
@@ -213,7 +310,7 @@ public class Protocol1 implements Protocol {
 		}
 		
 		//Tagging the client with its type information and communication version
-		conn.setAttachment(new ClientData(isServer, new ClientData.Type(userID), this));
+		conn.setAttachment(new ClientData(isServer, new ClientData.Type(userID, fcmToken), this));
 	}
 	
 	@Override

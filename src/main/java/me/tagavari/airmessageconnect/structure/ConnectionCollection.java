@@ -3,11 +3,12 @@ package me.tagavari.airmessageconnect.structure;
 import me.tagavari.airmessageconnect.ClientData;
 import me.tagavari.airmessageconnect.Main;
 import me.tagavari.airmessageconnect.SharedData;
+import me.tagavari.airmessageconnect.StorageUtils;
 import org.java_websocket.WebSocket;
+import org.java_websocket.framing.CloseFrame;
 
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
+import java.util.concurrent.ExecutionException;
 import java.util.logging.Level;
 
 /**
@@ -26,18 +27,52 @@ public class ConnectionCollection {
 	 * and will replace an existing one otherwise
 	 * @param connection The server WebSocket connection
 	 * @param groupID The connection's group ID
+	 * @return TRUE if the operation was successful
 	 */
-	public void addServer(WebSocket connection, String groupID) {
-		//Destroying a group if it already exists
+	public boolean addServer(WebSocket connection, String groupID) {
+		List<String> fcmTokenList;
+		boolean fcmTokenListModified;
+		
+		//Checking if a group already exists
 		ConnectionGroup existingGroup = connectionMap.get(groupID);
-		if(existingGroup != null) existingGroup.closeAll(SharedData.closeCodeOtherLocation);
+		if(existingGroup != null) {
+			//Closing the group
+			existingGroup.closeAll(SharedData.closeCodeOtherLocation);
+			
+			//Copying the FCM token list from the previous group
+			fcmTokenList = existingGroup.getClientFCMTokenList();
+			fcmTokenListModified = existingGroup.isClientFCMTokenListModified();
+		} else {
+			//Reading the FCM token list from the database
+			try {
+				List<String> dataFCMTokens = StorageUtils.instance().getFCMTokens(groupID);
+				if(dataFCMTokens == null) fcmTokenList = null;
+				else fcmTokenList = new ArrayList<>(dataFCMTokens);
+			} catch(ExecutionException | InterruptedException exception) {
+				//Logging the exception
+				Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+				
+				//Closing the connection
+				connection.close(CloseFrame.TRY_AGAIN_LATER);
+				
+				//Returning false
+				return false;
+			}
+			
+			//Fresh copy - no modifications
+			fcmTokenListModified = false;
+		}
 		
 		//Creating a new group
-		ConnectionGroup newGroup = new ConnectionGroup(connection, groupID);
+		ConnectionGroup newGroup = new ConnectionGroup(connection, groupID, fcmTokenList);
+		if(fcmTokenListModified) newGroup.setClientFCMTokenListModified();
 		connectionMap.put(groupID, newGroup);
 		
 		//Setting the connection's group
 		connection.<ClientData>getAttachment().setConnectionGroup(newGroup);
+		
+		//Returning true
+		return true;
 	}
 	
 	/**
@@ -48,9 +83,10 @@ public class ConnectionCollection {
 	 *
 	 * @param connection The client WebSocket client
 	 * @param groupID The connection's group ID
+	 * @param fcmToken The client's FCM token (or NULL if none is available)
 	 * @return TRUE if the operation was successful
 	 */
-	public boolean addClient(WebSocket connection, String groupID) {
+	public boolean addClient(WebSocket connection, String groupID, String fcmToken) {
 		//Getting the group
 		ConnectionGroup group = connectionMap.get(groupID);
 		
@@ -80,6 +116,9 @@ public class ConnectionCollection {
 		ClientData clientData = connection.getAttachment();
 		clientData.setConnectionGroup(group);
 		clientData.setConnectionID(connectionID);
+		
+		//Registering the client's FCM token
+		if(fcmToken != null) group.addClientFCMToken(fcmToken);
 		
 		//Operation successful!
 		return true;

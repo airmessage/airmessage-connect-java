@@ -4,18 +4,24 @@ import com.google.cloud.firestore.*;
 import me.tagavari.airmessageconnect.document.DocumentUser;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
+import java.util.logging.Level;
 
 public class StorageUtils {
 	//Singleton instance
 	private static final StorageUtils storageUtils = new StorageUtils();
 	
 	//Database structure
-	private static final String fieldUsersServerInstallationID = "server_id";
 	private static final String fieldUsersRelayID = "relay_id";
+	private static final String fieldUsersServerInstallationID = "server_id";
 	//private static final String fieldUsersIsSubscribed = "is_subscribed";
 	//private static final String fieldUsersSubscriptionSource = "subscription_source";
+	
+	private static final String collectionUsersData = "data";
+	private static final String documentDataFCM = "fcm";
+	private static final String fieldFCMList = "fcm_token_list";
 	
 	//Database references
 	private Firestore db;
@@ -41,7 +47,7 @@ public class StorageUtils {
 	/**
 	 * Get user information for a particular user
 	 * @param userUID The UID of the user to check
-	 * @return The document containing user information
+	 * @return The document containing user information, or NULL if none was found
 	 */
 	public DocumentUser getDocumentUser(String userUID) throws ExecutionException, InterruptedException {
 		//Retrieving the user's document
@@ -56,8 +62,37 @@ public class StorageUtils {
 				unboxBoolean(documentSnapshot.getBoolean(fieldUsersIsSubscribed)),
 				unboxInt(documentSnapshot.get(fieldUsersSubscriptionSource), 0)
 		); */
-		return new DocumentUser(documentSnapshot.getString(fieldUsersRelayID),
-				documentSnapshot.getString(fieldUsersServerInstallationID));
+		try {
+			return new DocumentUser(documentSnapshot.getString(fieldUsersRelayID), documentSnapshot.getString(fieldUsersServerInstallationID));
+		} catch(RuntimeException exception) {
+			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+			return null;
+		}
+	}
+	
+	public List<String> getFCMTokens(String userUID) throws ExecutionException, InterruptedException {
+		//Retrieving the user's document
+		DocumentSnapshot documentSnapshot = collectionUsers.document(userUID + '/' + collectionUsersData + '/' + documentDataFCM).get().get();
+		
+		//Returning if there is no document
+		if(!documentSnapshot.exists()) return null;
+		
+		//Returning the token list
+		try {
+			return (List<String>) documentSnapshot.get(fieldFCMList);
+		} catch(RuntimeException exception) {
+			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+			return null;
+		}
+	}
+	
+	public void updateFCMTokens(String userUID, List<String> list) throws ExecutionException, InterruptedException {
+		//Creating the update data
+		Map<String, Object> update = new HashMap<>();
+		update.put(fieldFCMList, list);
+		
+		//Updating the user data
+		collectionUsers.document(userUID + '/' + collectionUsersData + '/' + documentDataFCM).set(update, SetOptions.merge()).get();
 	}
 	
 	/**

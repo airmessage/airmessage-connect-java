@@ -2,18 +2,21 @@ package me.tagavari.airmessageconnect.structure;
 
 import org.java_websocket.WebSocket;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Represents a group of connections centered around a single server with any number of clients
  */
 public class ConnectionGroup {
+	private static final int fcmTokenListLimit = 8;
+	
 	//Server and client connections
 	private final WebSocket serverConnection;
 	private final Map<Integer, WebSocket> clientConnections = Collections.synchronizedMap(new HashMap<>());
+	
+	//The list of FCM tokens for this account
+	private final List<String> clientFCMTokenList;
+	private boolean isClientFCMTokenListModified = false;
 	
 	//The group ID of this connection group
 	private final String groupID;
@@ -26,9 +29,11 @@ public class ConnectionGroup {
 	 * @param serverConnection The server WebSocket connection
 	 * @param groupID The ID of this connection group
 	 */
-	public ConnectionGroup(WebSocket serverConnection, String groupID) {
+	public ConnectionGroup(WebSocket serverConnection, String groupID, List<String> clientFCMTokenList) {
 		this.groupID = groupID;
 		this.serverConnection = serverConnection;
+		if(clientFCMTokenList != null) this.clientFCMTokenList = clientFCMTokenList;
+		else this.clientFCMTokenList = new ArrayList<>(fcmTokenListLimit);
 	}
 	
 	/**
@@ -118,5 +123,70 @@ public class ConnectionGroup {
 	 */
 	public int nextConnectionID() {
 		return ++connectionID;
+	}
+	
+	/**
+	 * Returns a list representing the FCM tokens of all registered clients
+	 * @return The list
+	 */
+	public List<String> getClientFCMTokenList() {
+		return clientFCMTokenList;
+	}
+	
+	/**
+	 * Add a client FCM token to this group
+	 * This function is safe to call at any time -
+	 * if the token is already in the list, it will be brought to the top
+	 * if the token is not in the list, it will be added to the top, discarding the oldest item
+	 * @param token The token to add
+	 */
+	public void addClientFCMToken(String token) {
+		//Checking if the token already exists in the list
+		int index = clientFCMTokenList.indexOf(token);
+		if(index != -1) {
+			//Checking if the token isn't first in the list
+			if(index != 0) {
+				//Moving the token to the top of the list
+				clientFCMTokenList.remove(token);
+				clientFCMTokenList.add(0, token);
+				setClientFCMTokenListModified();
+			}
+		} else {
+			//Checking if the list is at capacity
+			if(clientFCMTokenList.size() >= fcmTokenListLimit) {
+				//Removing the oldest item
+				clientFCMTokenList.remove(fcmTokenListLimit - 1);
+			}
+			
+			//Adding the item to the top of the list
+			clientFCMTokenList.add(0, token);
+			setClientFCMTokenListModified();
+		}
+	}
+	
+	/**
+	 * Remove a client FCM token to this group
+	 * @param token The token to remove
+	 */
+	public void removeClientFCMToken(String token) {
+		boolean containedToken = clientFCMTokenList.remove(token);
+		if(containedToken) setClientFCMTokenListModified();
+	}
+	
+	/**
+	 * Called to check if the FCM token list has been modified
+	 * since it was loaded into this connection group
+	 * @return TRUE if the FCM token list has been modified
+	 */
+	public boolean isClientFCMTokenListModified() {
+		return isClientFCMTokenListModified;
+	}
+	
+	/**
+	 * Marks the FCM token list as modified, to be saved
+	 * when this group is finished
+	 */
+	public void setClientFCMTokenListModified() {
+		isClientFCMTokenListModified = true;
 	}
 }

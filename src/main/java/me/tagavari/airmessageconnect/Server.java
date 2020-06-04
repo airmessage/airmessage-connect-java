@@ -12,9 +12,12 @@ import org.java_websocket.handshake.ClientHandshake;
 import org.java_websocket.handshake.ServerHandshakeBuilder;
 import org.java_websocket.server.WebSocketServer;
 
+import java.net.HttpCookie;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
 import java.util.logging.Level;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -46,8 +49,8 @@ public class Server extends WebSocketServer {
 		}
 		
 		//Getting the cookies
-		Map<String, String> cookieMap = Stream.of(request.getFieldValue("Cookie").split(", *"))
-				.map(str -> str.split(":"))
+		Map<String, String> cookieMap = Stream.of(request.getFieldValue("Cookie").split("; *"))
+				.map(str -> str.split("="))
 				.collect(Collectors.toMap(str -> str[0], str -> str[1]));
 		
 		//Reading parameter data
@@ -86,7 +89,7 @@ public class Server extends WebSocketServer {
 			connectionCollection.addServer(conn, type.getGroupID());
 		} else {
 			//Adding the client to a group
-			boolean result = connectionCollection.addClient(conn, type.getGroupID());
+			boolean result = connectionCollection.addClient(conn, type.getGroupID(), type.getFCMToken());
 			
 			//Notifying the server of the addition
 			if(result) {
@@ -129,6 +132,15 @@ public class Server extends WebSocketServer {
 				//Unregistering the group and disconnecting all clients
 				group.closeAll(SharedData.closeCodeNoGroup);
 				connectionCollection.removeGroup(group.getGroupID());
+				
+				//Writing the group's client FCM tokens to the database (if modifications were made)
+				if(group.isClientFCMTokenListModified()) {
+					try {
+						StorageUtils.instance().updateFCMTokens(group.getGroupID(), group.getClientFCMTokenList());
+					} catch(ExecutionException | InterruptedException exception) {
+						Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+					}
+				}
 				
 				//Logging the event
 				Main.getLogger().log(Level.FINE, "Server of group " + group.getGroupID() + " disconnected from " + Main.connectionToString(conn) + " " + logSuffix);
