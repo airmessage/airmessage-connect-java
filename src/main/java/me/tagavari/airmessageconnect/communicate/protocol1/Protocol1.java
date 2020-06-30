@@ -30,6 +30,7 @@ import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
@@ -66,7 +67,7 @@ public class Protocol1 implements Protocol {
 					//Reading the token
 					byte[] data = new byte[bytes.remaining()];
 					bytes.get(data);
-					String token = new String(data, StandardCharsets.ISO_8859_1);
+					String token = new String(data, StandardCharsets.UTF_8);
 					
 					//Adding the token
 					clientData.getConnectionGroup().addClientFCMToken(token);
@@ -80,7 +81,7 @@ public class Protocol1 implements Protocol {
 					//Reading the token
 					byte[] data = new byte[bytes.remaining()];
 					bytes.get(data);
-					String token = new String(data, StandardCharsets.ISO_8859_1);
+					String token = new String(data, StandardCharsets.UTF_8);
 					
 					//Removing the token
 					clientData.getConnectionGroup().removeClientFCMToken(token);
