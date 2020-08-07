@@ -1,5 +1,6 @@
 package me.tagavari.airmessageconnect.structure;
 
+import me.tagavari.airmessageconnect.ClientData;
 import org.java_websocket.WebSocket;
 
 import java.util.*;
@@ -60,11 +61,15 @@ public class ConnectionGroup {
 	 */
 	public void closeAll(int code) {
 		//Closing existing connections
-		for(WebSocket connectionPair : clientConnections.values()) connectionPair.close(code);
+		for(WebSocket clientConnection : clientConnections.values()) {
+			clientConnection.<ClientData>getAttachment().setConnectionGroup(null);
+			clientConnection.close(code);
+		}
 		clientConnections.clear();
 		
-		//Closing the approach connection
+		//Closing the server connection
 		serverConnection.close(code);
+		serverConnection.<ClientData>getAttachment().setConnectionGroup(null);
 	}
 	
 	/**
