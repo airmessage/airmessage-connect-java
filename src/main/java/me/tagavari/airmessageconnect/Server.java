@@ -26,6 +26,8 @@ public class Server extends WebSocketServer {
 	
 	public Server(InetSocketAddress address) {
 		super(address);
+		
+		setConnectionLostTimeout(30 * 60); //Every half hour
 	}
 	
 	@Override
@@ -133,10 +135,12 @@ public class Server extends WebSocketServer {
 				
 				//Writing the group's client FCM tokens to the database (if modifications were made)
 				if(group.isClientFCMTokenListModified()) {
-					try {
-						StorageUtils.instance().updateFCMTokens(group.getGroupID(), group.getClientFCMTokenList());
-					} catch(ExecutionException | InterruptedException exception) {
-						Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+					if(!Main.isUnlinked()) {
+						try {
+							StorageUtils.instance().updateFCMTokens(group.getGroupID(), group.getClientFCMTokenList());
+						} catch(ExecutionException | InterruptedException exception) {
+							Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+						}
 					}
 				}
 				

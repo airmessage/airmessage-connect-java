@@ -14,6 +14,7 @@ dependencies {
 
     implementation 'org.java-websocket:Java-WebSocket:1.4.1'
     implementation 'org.msgpack:msgpack-core:0.8.20'
+    implementation 'org.slf4j:slf4j-nop:1.7.30'
 
     implementation 'com.google.firebase:firebase-admin:6.12.2'
 }

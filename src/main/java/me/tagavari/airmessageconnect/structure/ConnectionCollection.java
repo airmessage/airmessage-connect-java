@@ -43,20 +43,24 @@ public class ConnectionCollection {
 			fcmTokenList = existingGroup.getClientFCMTokenList();
 			fcmTokenListModified = existingGroup.isClientFCMTokenListModified();
 		} else {
-			//Reading the FCM token list from the database
-			try {
-				List<String> dataFCMTokens = StorageUtils.instance().getFCMTokens(groupID);
-				if(dataFCMTokens == null) fcmTokenList = null;
-				else fcmTokenList = new ArrayList<>(dataFCMTokens);
-			} catch(ExecutionException | InterruptedException exception) {
-				//Logging the exception
-				Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
-				
-				//Closing the connection
-				connection.close(CloseFrame.TRY_AGAIN_LATER);
-				
-				//Returning false
-				return false;
+			if(!Main.isUnlinked()) {
+				//Reading the FCM token list from the database
+				try {
+					List<String> dataFCMTokens = StorageUtils.instance().getFCMTokens(groupID);
+					if(dataFCMTokens == null) fcmTokenList = null;
+					else fcmTokenList = new ArrayList<>(dataFCMTokens);
+				} catch(ExecutionException | InterruptedException exception) {
+					//Logging the exception
+					Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+					
+					//Closing the connection
+					connection.close(CloseFrame.TRY_AGAIN_LATER);
+					
+					//Returning false
+					return false;
+				}
+			} else {
+				fcmTokenList = null;
 			}
 			
 			//Fresh copy - no modifications

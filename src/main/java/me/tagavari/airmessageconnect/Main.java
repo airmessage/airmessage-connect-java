@@ -4,21 +4,36 @@ import com.google.auth.oauth2.GoogleCredentials;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
 import org.java_websocket.WebSocket;
+import org.java_websocket.server.CustomSSLWebSocketServerFactory;
+import org.java_websocket.server.DefaultSSLWebSocketServerFactory;
+import org.java_websocket.server.DefaultWebSocketServerFactory;
 import org.java_websocket.server.WebSocketServer;
 
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLEngine;
+import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.security.KeyStore;
+import java.security.SecureRandom;
+import java.security.interfaces.RSAPrivateKey;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.logging.*;
 
 public class Main {
 	private static final int port = 1259;
 	
 	private static Logger logger;
+	
+	private static final String argUnlinked = "unlinked";
+	private static final String argInsecure = "insecure";
+	private static boolean isUnlinked = false;
+	private static boolean isInsecure = false;
 	
 	public static void main(String[] args) {
 		//Initializing the logger
@@ -32,24 +47,55 @@ public class Main {
 			logger.addHandler(handler);
 		}
 		
-		//Initializing Firebase
-		try {
-			FirebaseOptions options = new FirebaseOptions.Builder()
-					.setCredentials(GoogleCredentials.getApplicationDefault())
-					.build();
-			
-			FirebaseApp.initializeApp(options);
-		} catch(IOException exception) {
-			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
-			return;
+		//Reading the arguments
+		for(String argument : args) {
+			if(argUnlinked.equals(argument)) {
+				if(isUnlinked) continue;
+				isUnlinked = true;
+				Main.getLogger().log(Level.INFO, "Server is running in UNLINKED MODE. Accounts will not be verified. This functionality cannot be used in production.");
+			} else if(argInsecure.equals(argument)) {
+				if(isInsecure) continue;
+				isInsecure = true;
+				Main.getLogger().log(Level.INFO, "Server is running in INSECURE MODE. Traffic will not be encrypted. This functionality cannot be used in production.");
+			} else {
+				Main.getLogger().log(Level.INFO, "Unknown argument provided: " + argument);
+			}
 		}
 		
-		//Initializing data utils
-		StorageUtils.instance().initialize();
+		if(!isUnlinked()) {
+			//Initializing Firebase
+			try {
+				FirebaseOptions options = new FirebaseOptions.Builder()
+						.setCredentials(GoogleCredentials.getApplicationDefault())
+						.build();
+				
+				FirebaseApp.initializeApp(options);
+			} catch(IOException exception) {
+				Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+				return;
+			}
+			
+			//Initializing data utils
+			StorageUtils.instance().initialize();
+		}
+		
+		//Creating the server
+		WebSocketServer server = new Server(new InetSocketAddress(port));
+		
+		if(!Main.isInsecure()) {
+			//Loading the SSL context
+			SSLContext sslContext = SecurityUtils.loadPEM(new File("certificate.pem"));
+			if(sslContext == null) {
+				return;
+			} else {
+				SSLEngine engine = sslContext.createSSLEngine();
+				String[] ciphers = engine.getEnabledCipherSuites();
+				server.setWebSocketFactory(new CustomSSLWebSocketServerFactory(sslContext, new String[]{"TLSv1.2"}, ciphers));
+			}
+		}
 		
 		//Starting the server
-		WebSocketServer server = new Server(new InetSocketAddress(port));
-		server.run();
+		server.start();
 	}
 	
 	public static Logger getLogger() {
@@ -83,5 +129,13 @@ public class Main {
 		InetAddress address = remoteSocketAddress.getAddress();
 		if(address == null) return "unknown";
 		return address.getHostAddress() + " (" + address.getHostName() + ")";
+	}
+	
+	public static boolean isUnlinked() {
+		return isUnlinked;
+	}
+	
+	public static boolean isInsecure() {
+		return isInsecure;
 	}
 }

@@ -30,7 +30,6 @@ import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
@@ -46,7 +45,10 @@ public class Protocol1 implements Protocol {
 			switch(type) {
 				case NHT.nhtClientProxy: {
 					//Client-only
-					if(clientData.isServer()) break;
+					if(clientData.isServer()) {
+						Main.getLogger().log(Level.INFO, "Ignoring client proxy request - request from server");
+						break;
+					}
 					
 					//Reading the data
 					byte[] data = new byte[bytes.remaining()];
@@ -62,7 +64,10 @@ public class Protocol1 implements Protocol {
 				}
 				case NHT.nhtClientAddFCMToken: {
 					//Client-only
-					if(clientData.isServer()) break;
+					if(clientData.isServer()) {
+						Main.getLogger().log(Level.INFO, "Ignoring token addition request - request from server");
+						break;
+					}
 					
 					//Reading the token
 					byte[] data = new byte[bytes.remaining()];
@@ -76,7 +81,10 @@ public class Protocol1 implements Protocol {
 				}
 				case NHT.nhtClientRemoveFCMToken: {
 					//Client-only
-					if(clientData.isServer()) break;
+					if(clientData.isServer()) {
+						Main.getLogger().log(Level.INFO, "Ignoring token removal request - request from server");
+						break;
+					}
 					
 					//Reading the token
 					byte[] data = new byte[bytes.remaining()];
@@ -90,7 +98,10 @@ public class Protocol1 implements Protocol {
 				}
 				case NHT.nhtServerClose: {
 					//Server-only
-					if(!clientData.isServer()) break;
+					if(!clientData.isServer()) {
+						Main.getLogger().log(Level.INFO, "Ignoring server close request - request from client");
+						break;
+					}
 					
 					//Reading the data
 					int connectionID = bytes.getInt();
@@ -102,7 +113,10 @@ public class Protocol1 implements Protocol {
 				}
 				case NHT.nhtServerProxy: {
 					//Server-only
-					if(!clientData.isServer()) break;
+					if(!clientData.isServer()) {
+						Main.getLogger().log(Level.INFO, "Ignoring server proxy request - request from client");
+						break;
+					}
 					
 					//Reading the data
 					int connectionID = bytes.getInt();
@@ -125,7 +139,10 @@ public class Protocol1 implements Protocol {
 				}
 				case NHT.nhtServerProxyBroadcast: {
 					//Server-only
-					if(!clientData.isServer()) break;
+					if(!clientData.isServer()) {
+						Main.getLogger().log(Level.INFO, "Ignoring broadcast request - request from client");
+						break;
+					}
 					
 					//Reading the data
 					byte[] data = new byte[bytes.remaining()];
@@ -143,7 +160,15 @@ public class Protocol1 implements Protocol {
 				}
 				case NHT.nhtServerNotifyPush: {
 					//Server-only
-					if(!clientData.isServer()) break;
+					if(!clientData.isServer()) {
+						Main.getLogger().log(Level.INFO, "Ignoring FCM push request - request from client");
+						break;
+					}
+					
+					if(Main.isUnlinked()) {
+						Main.getLogger().log(Level.INFO, "Ignoring FCM push request - Connect is running unlinked");
+						break;
+					}
 					
 					//Getting the server' connection group
 					ConnectionGroup connectionGroup = clientData.getConnectionGroup();
@@ -222,28 +247,13 @@ public class Protocol1 implements Protocol {
 						throw new InvalidDataException(CloseFrame.PROTOCOL_ERROR);
 					}
 					
-					//Validating the ID token
-					try {
-						FirebaseToken decodedToken = FirebaseAuth.getInstance().verifyIdToken(idToken);
-						userID = decodedToken.getUid();
-					} catch(IllegalArgumentException exception) {
-						Main.getLogger().log(Level.WARNING, "Rejecting handshake (illegal Firebase state) from client " + Main.connectionToString(conn));
-						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-						throw new InvalidDataException(CloseFrame.PROTOCOL_ERROR);
-					} catch(FirebaseAuthException exception) {
-						Main.getLogger().log(Level.WARNING, "Rejecting handshake (token validation error) from client " + Main.connectionToString(conn));
-						Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-						throw new InvalidDataException(SharedData.closeCodeAccountValidation);
-					}
-					
-					//Rejecting if this user doesn't have a subscription
-					if(!StorageUtils.instance().checkSubscription(userID)) {
-						Main.getLogger().log(Level.WARNING, "Rejecting handshake (no subscription) from client " + Main.connectionToString(conn));
-						throw new InvalidDataException(SharedData.closeCodeNoSubscription);
-					}
+					//Validating the user's ID token
+					userID = validateIdToken(conn, idToken);
 					
 					//Updating the installation ID and relay ID for this user
-					StorageUtils.instance().updateRegisteredServerRelayInstallationID(userID, Main.getRelayID(), installationID);
+					if(!Main.isUnlinked()) {
+						StorageUtils.instance().updateRegisteredServerRelayInstallationID(userID, Main.getRelayID(), installationID);
+					}
 				} else {
 					//Failing if there is no user ID, or the user ID is invalid ("/" prevents injection attacks)
 					if(userID == null || userID.isEmpty() || userID.contains("/")) {
@@ -251,24 +261,26 @@ public class Protocol1 implements Protocol {
 						throw new InvalidDataException(CloseFrame.PROTOCOL_ERROR);
 					}
 					
-					//Rejecting if this user doesn't have a subscription
-					if(!StorageUtils.instance().checkSubscription(userID)) {
-						Main.getLogger().log(Level.WARNING, "Rejecting handshake (no subscription) from client " + Main.connectionToString(conn));
-						throw new InvalidDataException(SharedData.closeCodeNoSubscription);
-					}
-					
-					//Fetching user details
-					DocumentUser documentUser = StorageUtils.instance().getDocumentUser(userID);
-					
-					//Rejecting if this is installation ID out-of-date
-					if(documentUser == null || !installationID.equals(documentUser.installationID)) {
-						Main.getLogger().log(Level.WARNING, "Rejecting handshake (token refresh) from client " + Main.connectionToString(conn));
-						throw new InvalidDataException(SharedData.closeCodeServerTokenRefresh);
-					}
-					
-					//Updating the relay ID for this user (if necessary)
-					String thisRelayID = Main.getRelayID();
-					if(!thisRelayID.equals(documentUser.relayID)) StorageUtils.instance().updateRegisteredServerRelayID(userID, thisRelayID);
+					if(!Main.isUnlinked()) {
+						//Rejecting if this user doesn't have a subscription
+						if(!StorageUtils.instance().checkSubscription(userID)) {
+							Main.getLogger().log(Level.WARNING, "Rejecting handshake (no subscription) from client " + Main.connectionToString(conn));
+							throw new InvalidDataException(SharedData.closeCodeNoSubscription);
+						}
+						
+						//Fetching user details
+						DocumentUser documentUser = StorageUtils.instance().getDocumentUser(userID);
+						
+						//Rejecting if this is installation ID out-of-date
+						if(documentUser == null || !installationID.equals(documentUser.installationID)) {
+							Main.getLogger().log(Level.WARNING, "Rejecting handshake (token refresh) from client " + Main.connectionToString(conn));
+							throw new InvalidDataException(SharedData.closeCodeServerTokenRefresh);
+						}
+						
+						//Updating the relay ID for this user (if necessary)
+						String thisRelayID = Main.getRelayID();
+						if(!thisRelayID.equals(documentUser.relayID)) StorageUtils.instance().updateRegisteredServerRelayID(userID, thisRelayID);
+					} //Otherwise, let the user through without installation ID verification
 				}
 			} else {
 				//Failing if a user ID was provided
@@ -277,30 +289,8 @@ public class Protocol1 implements Protocol {
 					throw new InvalidDataException(CloseFrame.PROTOCOL_ERROR);
 				}
 				
-				//Validating the ID token (and failing if a user UID was provided)
-				if(idToken == null) {
-					Main.getLogger().log(Level.WARNING, "Rejecting handshake (no ID token provided) from client " + Main.connectionToString(conn));
-					throw new InvalidDataException(CloseFrame.PROTOCOL_ERROR);
-				}
-				
-				try {
-					FirebaseToken decodedToken = FirebaseAuth.getInstance().verifyIdToken(idToken);
-					userID = decodedToken.getUid();
-				} catch(IllegalArgumentException exception) {
-					Main.getLogger().log(Level.WARNING, "Rejecting handshake (illegal Firebase state) from client " + Main.connectionToString(conn));
-					Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-					throw new InvalidDataException(CloseFrame.PROTOCOL_ERROR);
-				} catch(FirebaseAuthException exception) {
-					Main.getLogger().log(Level.WARNING, "Rejecting handshake (token validation error) from client " + Main.connectionToString(conn));
-					Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
-					throw new InvalidDataException(SharedData.closeCodeAccountValidation);
-				}
-				
-				//Rejecting if this user doesn't have a subscription
-				if(!StorageUtils.instance().checkSubscription(userID)) {
-					Main.getLogger().log(Level.WARNING, "Rejecting handshake (no subscription) from client " + Main.connectionToString(conn));
-					throw new InvalidDataException(SharedData.closeCodeNoSubscription);
-				}
+				//Validating the user's ID token
+				userID = validateIdToken(conn, idToken);
 			}
 		} catch(ExecutionException | InterruptedException exception) {
 			Main.getLogger().log(Level.WARNING, "Rejecting handshake (internal exception) from client " + Main.connectionToString(conn));
@@ -312,6 +302,51 @@ public class Protocol1 implements Protocol {
 		
 		//Tagging the client with its type information and communication version
 		conn.setAttachment(new ClientData(isServer, new ClientData.Type(userID, fcmToken), this));
+	}
+	
+	/**
+	 * Checks an ID token for validity and subscription, and returns the user ID
+	 * @param conn The WebSocket connection
+	 * @param idToken The ID token provided by the connection
+	 * @return The user ID
+	 * @throws InvalidDataException If the token is invalid, or the usr should not be allowed to connect
+	 * @throws ExecutionException StorageUtils exception
+	 * @throws InterruptedException StorageUtils exception
+	 */
+	private static String validateIdToken(WebSocket conn, String idToken) throws InvalidDataException, ExecutionException, InterruptedException {
+		//Failing if no ID token was provided
+		if(idToken == null) {
+			Main.getLogger().log(Level.WARNING, "Rejecting handshake (no ID token provided) from client " + Main.connectionToString(conn));
+			throw new InvalidDataException(CloseFrame.PROTOCOL_ERROR);
+		}
+		
+		if(!Main.isUnlinked()) {
+			String userID;
+			try {
+				FirebaseToken decodedToken = FirebaseAuth.getInstance().verifyIdToken(idToken);
+				userID = decodedToken.getUid();
+			} catch(IllegalArgumentException exception) {
+				Main.getLogger().log(Level.WARNING, "Rejecting handshake (illegal Firebase state) from client " + Main.connectionToString(conn));
+				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+				throw new InvalidDataException(CloseFrame.PROTOCOL_ERROR);
+			} catch(FirebaseAuthException exception) {
+				Main.getLogger().log(Level.WARNING, "Rejecting handshake (token validation error) from client " + Main.connectionToString(conn));
+				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+				throw new InvalidDataException(SharedData.closeCodeAccountValidation);
+			}
+			
+			//Rejecting if this user doesn't have a subscription
+			if(!StorageUtils.instance().checkSubscription(userID)) {
+				Main.getLogger().log(Level.WARNING, "Rejecting handshake (no subscription) from client " + Main.connectionToString(conn));
+				throw new InvalidDataException(SharedData.closeCodeNoSubscription);
+			}
+			
+			//Returning the user's ID
+			return userID;
+		} else {
+			//Just use the ID token as the user ID
+			return idToken;
+		}
 	}
 	
 	@Override
