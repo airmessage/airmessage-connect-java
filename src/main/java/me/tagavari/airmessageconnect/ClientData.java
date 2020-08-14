@@ -9,6 +9,7 @@ public class ClientData {
 	private final Protocol protocol;
 	private ConnectionGroup connectionGroup;
 	private int connectionID;
+	private boolean disableCleanup = false;
 	
 	public ClientData(boolean isServer, Type type, Protocol protocol) {
 		this.isServer = isServer;
@@ -50,6 +51,14 @@ public class ClientData {
 	
 	public void setConnectionID(int connectionID) {
 		this.connectionID = connectionID;
+	}
+	
+	public boolean getDisableCleanup() {
+		return disableCleanup;
+	}
+	
+	public void setDisableCleanup(boolean disableCleanup) {
+		this.disableCleanup = disableCleanup;
 	}
 	
 	public static class Type {

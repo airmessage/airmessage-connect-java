@@ -27,7 +27,7 @@ public class Server extends WebSocketServer {
 	public Server(InetSocketAddress address) {
 		super(address);
 		
-		setConnectionLostTimeout(30 * 60); //Every half hour
+		setConnectionLostTimeout(10 * 60); //Every 10 mins
 	}
 	
 	@Override
@@ -129,17 +129,19 @@ public class Server extends WebSocketServer {
 		} else {
 			//Log the event and clean up
 			if(clientData.isServer()) {
-				//Unregistering the group and disconnecting all clients
-				group.closeAll(SharedData.closeCodeNoGroup);
-				connectionCollection.removeGroup(group.getGroupID());
-				
-				//Writing the group's client FCM tokens to the database (if modifications were made)
-				if(group.isClientFCMTokenListModified()) {
-					if(!Main.isUnlinked()) {
-						try {
-							StorageUtils.instance().updateFCMTokens(group.getGroupID(), group.getClientFCMTokenList());
-						} catch(ExecutionException | InterruptedException exception) {
-							Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+				if(!clientData.getDisableCleanup()) {
+					//Unregistering the group and disconnecting all clients
+					group.closeAll(SharedData.closeCodeNoGroup);
+					connectionCollection.removeGroup(group.getGroupID());
+					
+					//Writing the group's client FCM tokens to the database (if modifications were made)
+					if(group.isClientFCMTokenListModified()) {
+						if(!Main.isUnlinked()) {
+							try {
+								StorageUtils.instance().updateFCMTokens(group.getGroupID(), group.getClientFCMTokenList());
+							} catch(ExecutionException | InterruptedException exception) {
+								Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+							}
 						}
 					}
 				}
@@ -150,12 +152,14 @@ public class Server extends WebSocketServer {
 				//Getting the disconnected client's connection ID
 				int connectionID = clientData.getConnectionID();
 				
-				//Unregistering the connection if the connection is a client
-				group.removeClient(connectionID);
-				
-				//Notifying the server of the disconnection
-				WebSocket serverSocket = clientData.getConnectionGroup().getConnectionServer();
-				serverSocket.send(serverSocket.<ClientData>getAttachment().getProtocol().sendServerDisconnection(connectionID));
+				if(!clientData.getDisableCleanup()) {
+					//Unregistering the connection if the connection is a client
+					group.removeClient(connectionID);
+					
+					//Notifying the server of the disconnection
+					WebSocket serverSocket = clientData.getConnectionGroup().getConnectionServer();
+					serverSocket.send(serverSocket.<ClientData>getAttachment().getProtocol().sendServerDisconnection(connectionID));
+				}
 				
 				//Logging the event
 				Main.getLogger().log(Level.FINE, "Client " + clientData.getConnectionID() + " of " + group.getGroupID() + " disconnected from " + Main.connectionToString(conn) + " " + logSuffix);

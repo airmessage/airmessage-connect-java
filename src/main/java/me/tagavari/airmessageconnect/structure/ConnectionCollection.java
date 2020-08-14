@@ -16,7 +16,7 @@ import java.util.logging.Level;
  */
 public class ConnectionCollection {
 	//Amount of clients allowed per group
-	private static final int groupCapacity = 3;
+	private static final int groupCapacity = 4;
 	
 	private final Map<String, ConnectionGroup> connectionMap = Collections.synchronizedMap(new HashMap<>());
 	

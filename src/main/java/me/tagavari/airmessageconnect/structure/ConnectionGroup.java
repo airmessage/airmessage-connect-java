@@ -62,14 +62,14 @@ public class ConnectionGroup {
 	public void closeAll(int code) {
 		//Closing existing connections
 		for(WebSocket clientConnection : clientConnections.values()) {
-			clientConnection.<ClientData>getAttachment().setConnectionGroup(null);
+			clientConnection.<ClientData>getAttachment().setDisableCleanup(true);
 			clientConnection.close(code);
 		}
 		clientConnections.clear();
 		
 		//Closing the server connection
+		serverConnection.<ClientData>getAttachment().setDisableCleanup(true);
 		serverConnection.close(code);
-		serverConnection.<ClientData>getAttachment().setConnectionGroup(null);
 	}
 	
 	/**
