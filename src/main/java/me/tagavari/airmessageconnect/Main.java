@@ -5,8 +5,6 @@ import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
 import org.java_websocket.WebSocket;
 import org.java_websocket.server.CustomSSLWebSocketServerFactory;
-import org.java_websocket.server.DefaultSSLWebSocketServerFactory;
-import org.java_websocket.server.DefaultWebSocketServerFactory;
 import org.java_websocket.server.WebSocketServer;
 
 import javax.net.ssl.SSLContext;
@@ -17,16 +15,16 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.security.KeyStore;
-import java.security.SecureRandom;
-import java.security.interfaces.RSAPrivateKey;
+import java.nio.file.Files;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
-import java.util.Arrays;
+import java.util.Date;
 import java.util.logging.*;
 
 public class Main {
 	private static final int port = 1259;
+	
+	private static final File logFile = new File("logs", "latest.log");
 	
 	private static Logger logger;
 	
@@ -45,6 +43,17 @@ public class Main {
 			handler.setLevel(Level.FINEST);
 			handler.setFormatter(getLoggerFormatter());
 			logger.addHandler(handler);
+		}
+		try {
+			if(!logFile.getParentFile().exists()) logFile.getParentFile().mkdir();
+			else if(logFile.exists()) Files.move(logFile.toPath(), FileHelper.findFreeFile(logFile.getParentFile(), new SimpleDateFormat("YYYY-MM-dd").format(new Date()) + ".log", "-", 1).toPath());
+			
+			FileHandler handler = new FileHandler(logFile.getPath());
+			handler.setLevel(Level.FINEST);
+			handler.setFormatter(getLoggerFormatter());
+			logger.addHandler(handler);
+		} catch(IOException exception) {
+			Main.getLogger().log(Level.SEVERE, "Failed to initialize log file - continuing without saving logs to disk");
 		}
 		
 		//Reading the arguments
