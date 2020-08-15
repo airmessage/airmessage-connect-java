@@ -17,10 +17,14 @@ import java.nio.ByteBuffer;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.logging.Level;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class Server extends WebSocketServer {
+	//Creating the constants
+	private static final Pattern originRegex = Pattern.compile("^(?:https://web\\.airmessage\\.org)|(?:https?://localhost(?::\\d+)?|(?:app))$");
+	
 	//Creating the state values
 	private final ConnectionCollection connectionCollection = new ConnectionCollection();
 	
@@ -42,7 +46,19 @@ public class Server extends WebSocketServer {
 		//Logging the event
 		Main.getLogger().log(Level.FINE, "Responding to handshake from client " + Main.connectionToString(conn));
 		
-		//Checking for cookie header
+		//Checking for an origin header header
+		if(!request.hasFieldValue("Origin")) {
+			Main.getLogger().log(Level.FINE, "Rejecting handshake (no origin) from client " + Main.connectionToString(conn));
+			throw new InvalidDataException(CloseFrame.PROTOCOL_ERROR);
+		}
+		
+		//Validating the origin
+		if(!originRegex.matcher(request.getFieldValue("Origin")).matches()) {
+			Main.getLogger().log(Level.FINE, "Rejecting handshake (bad origin - " + request.getFieldValue("Origin") + ") from client " + Main.connectionToString(conn));
+			throw new InvalidDataException(CloseFrame.PROTOCOL_ERROR);
+		}
+		
+		//Checking for a cookie header
 		if(!request.hasFieldValue("Cookie")) {
 			Main.getLogger().log(Level.FINE, "Rejecting handshake (no cookie) from client " + Main.connectionToString(conn));
 			throw new InvalidDataException(CloseFrame.PROTOCOL_ERROR);
