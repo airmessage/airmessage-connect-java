@@ -64,10 +64,18 @@ public class ClientData {
 	public static class Type {
 		private final String groupID;
 		private final String fcmToken;
+		private final int closeCode;
 		
 		public Type(String groupID, String fcmToken) {
 			this.groupID = groupID;
 			this.fcmToken = fcmToken;
+			this.closeCode = -1;
+		}
+		
+		public Type(int closeCode) {
+			this.groupID = null;
+			this.fcmToken = null;
+			this.closeCode = closeCode;
 		}
 		
 		public String getGroupID() {
@@ -76,6 +84,10 @@ public class ClientData {
 		
 		public String getFCMToken() {
 			return fcmToken;
+		}
+		
+		public int getCloseCode() {
+			return closeCode;
 		}
 	}
 }

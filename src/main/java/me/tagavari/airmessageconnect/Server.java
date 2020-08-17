@@ -100,6 +100,13 @@ public class Server extends WebSocketServer {
 		ClientData.Type type = clientData.getType();
 		clientData.clearType();
 		
+		//Checking if the client is to be disconnected
+		if(type.getCloseCode() != -1) {
+			Main.getLogger().log(Level.FINE, "Disconnecting queued connection from " + Main.connectionToString(conn) + " (" + type.getCloseCode() + ")");
+			conn.close(type.getCloseCode());
+			return;
+		}
+		
 		if(clientData.isServer()) {
 			//Adding a new collection for the server
 			connectionCollection.addServer(conn, type.getGroupID());

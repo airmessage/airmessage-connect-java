@@ -217,6 +217,7 @@ public class Protocol1 implements Protocol {
 		//Reading parameter data
 		boolean isServer;
 		String installationID, idToken, userID, fcmToken;
+		int closeCode = -1;
 		try {
 			isServer = Boolean.parseBoolean(cookieMap.get("isServer"));
 			installationID = cookieMap.get("installationID");
@@ -265,7 +266,8 @@ public class Protocol1 implements Protocol {
 						//Rejecting if this user doesn't have a subscription
 						if(!StorageUtils.instance().checkSubscription(userID)) {
 							Main.getLogger().log(Level.WARNING, "Rejecting handshake (no subscription) from client " + Main.connectionToString(conn));
-							throw new InvalidDataException(SharedData.closeCodeNoSubscription);
+							//throw new InvalidDataException(SharedData.closeCodeNoSubscription);
+							closeCode = SharedData.closeCodeNoSubscription;
 						}
 						
 						//Fetching user details
@@ -274,7 +276,8 @@ public class Protocol1 implements Protocol {
 						//Rejecting if this is installation ID out-of-date
 						if(documentUser == null || !installationID.equals(documentUser.installationID)) {
 							Main.getLogger().log(Level.WARNING, "Rejecting handshake (token refresh) from client " + Main.connectionToString(conn));
-							throw new InvalidDataException(SharedData.closeCodeServerTokenRefresh);
+							//throw new InvalidDataException(SharedData.closeCodeServerTokenRefresh);
+							closeCode = SharedData.closeCodeServerTokenRefresh;
 						}
 						
 						//Updating the relay ID for this user (if necessary)
@@ -298,10 +301,17 @@ public class Protocol1 implements Protocol {
 			
 			//Internal error
 			throw new InvalidDataException(CloseFrame.TRY_AGAIN_LATER);
+		} catch(InvalidDataException exception) {
+			//Disconnect the client later if we're rejecting them with a custom close code
+			if(exception.getCloseCode() >= 4000 && exception.getCloseCode() < 5000) {
+				closeCode = exception.getCloseCode();
+			} else {
+				throw exception;
+			}
 		}
 		
 		//Tagging the client with its type information and communication version
-		conn.setAttachment(new ClientData(isServer, new ClientData.Type(userID, fcmToken), this));
+		conn.setAttachment(new ClientData(isServer, closeCode == -1 ? new ClientData.Type(userID, fcmToken) : new ClientData.Type(closeCode), this));
 	}
 	
 	/**
