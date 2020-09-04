@@ -13,7 +13,9 @@ import org.java_websocket.handshake.ServerHandshakeBuilder;
 import org.java_websocket.server.WebSocketServer;
 
 import java.net.InetSocketAddress;
+import java.net.URLDecoder;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.logging.Level;
@@ -23,6 +25,7 @@ import java.util.stream.Stream;
 
 public class Server extends WebSocketServer {
 	//Creating the constants
+	//"web.airmessage.org", "localhost", or "app"
 	private static final Pattern originRegex = Pattern.compile("^(?:https://web\\.airmessage\\.org)|(?:https?://localhost(?::\\d+)?|(?:app))$");
 	
 	//Creating the state values
@@ -58,23 +61,49 @@ public class Server extends WebSocketServer {
 			throw new InvalidDataException(CloseFrame.PROTOCOL_ERROR);
 		}
 		
-		//Checking for a cookie header
-		if(!request.hasFieldValue("Cookie")) {
-			Main.getLogger().log(Level.FINE, "Rejecting handshake (no cookie) from client " + Main.connectionToString(conn));
-			throw new InvalidDataException(CloseFrame.PROTOCOL_ERROR);
+		Map<String, String> queryParams;
+		{
+			//Checking for a resource descriptor
+			String resourceDescriptor = request.getResourceDescriptor();
+			if(resourceDescriptor.isEmpty()) {
+				Main.getLogger().log(Level.FINE, "Rejecting handshake (no resource descriptor) from client " + Main.connectionToString(conn));
+				throw new InvalidDataException(CloseFrame.PROTOCOL_ERROR);
+			}
+			
+			//Extracting the query from the string
+			int queryIndex = resourceDescriptor.lastIndexOf("?");
+			if(queryIndex == -1) {
+				Main.getLogger().log(Level.FINE, "Rejecting handshake (no query params - " + resourceDescriptor + ") from client " + Main.connectionToString(conn));
+				throw new InvalidDataException(CloseFrame.PROTOCOL_ERROR);
+			}
+			String queryString = resourceDescriptor.substring(queryIndex + 1);
+			
+			//Getting the query parameters
+			try {
+				queryParams = Stream.of(queryString.split("&"))
+						.map(str -> {
+							//Split the string into key-value pair
+							String[] keyValue = str.split("=");
+							if(keyValue.length != 2) throw new IllegalStateException("Invalid query key-value: " + str);
+							
+							//Decode the value side
+							keyValue[1] = URLDecoder.decode(keyValue[1], StandardCharsets.UTF_8);
+							
+							return keyValue;
+						})
+						.collect(Collectors.toMap(str -> str[0], str -> str[1]));
+			} catch(IllegalStateException exception) {
+				Main.getLogger().log(Level.FINE, "Rejecting handshake (bad query formatting - " + exception.getMessage() + ") from client " + Main.connectionToString(conn));
+				throw new InvalidDataException(CloseFrame.PROTOCOL_ERROR);
+			}
 		}
-		
-		//Getting the cookies
-		Map<String, String> cookieMap = Stream.of(request.getFieldValue("Cookie").split("; *"))
-				.map(str -> str.split("="))
-				.collect(Collectors.toMap(str -> str[0], str -> str[1]));
 		
 		//Reading parameter data
 		int commVer;
 		try {
-			commVer = Integer.parseInt(cookieMap.get("communications"));
+			commVer = Integer.parseInt(queryParams.get("communications"));
 		} catch(NumberFormatException exception) {
-			Main.getLogger().log(Level.FINE, "Rejecting handshake (bad communications string - " + cookieMap.get("communications") + ") from client " + Main.connectionToString(conn));
+			Main.getLogger().log(Level.FINE, "Rejecting handshake (bad communications string - " + queryParams.get("communications") + ") from client " + Main.connectionToString(conn));
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			throw new InvalidDataException(CloseFrame.PROTOCOL_ERROR);
 		}
@@ -87,7 +116,7 @@ public class Server extends WebSocketServer {
 		}
 		
 		//Running handshake validation through the protocol
-		protocol.handleHandshake(conn, draft, request, cookieMap);
+		protocol.handleHandshake(conn, draft, request, queryParams);
 		
 		//Accepting the request
 		return builder;

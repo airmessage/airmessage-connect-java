@@ -213,20 +213,18 @@ public class Protocol1 implements Protocol {
 	}
 	
 	@Override
-	public void handleHandshake(WebSocket conn, Draft draft, ClientHandshake request, Map<String, String> cookieMap) throws InvalidDataException {
+	public void handleHandshake(WebSocket conn, Draft draft, ClientHandshake request, Map<String, String> paramMap) throws InvalidDataException {
 		//Reading parameter data
 		boolean isServer;
 		String installationID, idToken, userID, fcmToken;
 		int closeCode = -1;
 		try {
-			isServer = Boolean.parseBoolean(cookieMap.get("isServer"));
-			installationID = cookieMap.get("installationID");
-			idToken = cookieMap.get("idToken");
-			userID = cookieMap.get("userID");
-			if(userID != null) userID = URLDecoder.decode(userID, "UTF-8");
-			fcmToken = cookieMap.get("fcmToken");
-			if(fcmToken != null) fcmToken = URLDecoder.decode(fcmToken, "UTF-8");
-		} catch(NumberFormatException | UnsupportedEncodingException exception) {
+			isServer = Boolean.parseBoolean(paramMap.get("is_server"));
+			installationID = paramMap.get("installation_id");
+			idToken = paramMap.get("id_token");
+			userID = paramMap.get("user_id");
+			fcmToken = paramMap.get("fcm_token");
+		} catch(NumberFormatException exception) {
 			Main.getLogger().log(Level.WARNING, "Rejecting handshake (bad request format) from client " + Main.connectionToString(conn));
 			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
 			throw new InvalidDataException(CloseFrame.PROTOCOL_ERROR);

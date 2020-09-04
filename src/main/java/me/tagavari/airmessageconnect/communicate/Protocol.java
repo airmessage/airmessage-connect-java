@@ -23,10 +23,10 @@ public interface Protocol {
 	 * @param conn The client connection that initiated this handshake
 	 * @param draft The draft of the current connection
 	 * @param request Client request data
-	 * @param cookieMap A map of cookie tags to data (helper)
+	 * @param paramMap A map of parameter keys to data (helper)
 	 * @throws InvalidDataException If this request is to be rejected
 	 */
-	void handleHandshake(WebSocket conn, Draft draft, ClientHandshake request, Map<String, String> cookieMap) throws InvalidDataException;
+	void handleHandshake(WebSocket conn, Draft draft, ClientHandshake request, Map<String, String> paramMap) throws InvalidDataException;
 	
 	/**
 	 * Sends a message signaling the client that the connection is OK to use
