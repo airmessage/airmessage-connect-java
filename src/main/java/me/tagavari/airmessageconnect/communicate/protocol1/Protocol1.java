@@ -7,10 +7,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseAuthException;
 import com.google.firebase.auth.FirebaseToken;
-import com.google.firebase.messaging.BatchResponse;
-import com.google.firebase.messaging.FirebaseMessaging;
-import com.google.firebase.messaging.MulticastMessage;
-import com.google.firebase.messaging.SendResponse;
+import com.google.firebase.messaging.*;
 import me.tagavari.airmessageconnect.ClientData;
 import me.tagavari.airmessageconnect.Main;
 import me.tagavari.airmessageconnect.SharedData;
@@ -31,6 +28,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.logging.Level;
@@ -180,25 +178,31 @@ public class Protocol1 implements Protocol {
 							.addAllTokens(tokens)
 							.build();
 					ApiFuture<BatchResponse> responseFuture = FirebaseMessaging.getInstance().sendMulticastAsync(message);
-					ApiFutures.addCallback(responseFuture, new ApiFutureCallback<BatchResponse>() {
+					ApiFutures.addCallback(responseFuture, new ApiFutureCallback<>() {
 						@Override
 						public void onFailure(Throwable throwable) {
 							throwable.printStackTrace();
 						}
 						
 						@Override
-						public void onSuccess(BatchResponse response) {
-							if(response.getFailureCount() > 0) {
+						public void onSuccess(BatchResponse batchResponse) {
+							if(batchResponse.getFailureCount() > 0) {
 								//Finding failed responses
-								List<SendResponse> responseList = response.getResponses();
-								for(int i = 0; i < responseList.size(); i++) {
-									if(responseList.get(i).isSuccessful()) continue;
+								List<SendResponse> responseList = batchResponse.getResponses();
+								for(ListIterator<SendResponse> iterator = responseList.listIterator(); iterator.hasNext();) {
+									//Getting the response information
+									int i = iterator.nextIndex();
+									SendResponse response = iterator.next();
 									
-									//The order of responses corresponds to the order of the registration tokens
-									String failedToken = tokens.get(i);
-									
-									//Removing failed tokens
-									connectionGroup.removeClientFCMToken(failedToken);
+									//Checking if the response failed due to an unregistered token
+									if(!response.isSuccessful() &&
+									   response.getException().getMessagingErrorCode() == MessagingErrorCode.UNREGISTERED) {
+										//The order of responses corresponds to the order of the registration tokens
+										String failedToken = tokens.get(i);
+										
+										//Removing failed tokens
+										connectionGroup.removeClientFCMToken(failedToken);
+									}
 								}
 							}
 						}
