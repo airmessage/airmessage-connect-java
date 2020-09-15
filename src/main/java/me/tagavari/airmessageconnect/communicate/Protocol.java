@@ -24,9 +24,10 @@ public interface Protocol {
 	 * @param draft The draft of the current connection
 	 * @param request Client request data
 	 * @param paramMap A map of parameter keys to data (helper)
+	 * @return The client data to attach to this connection
 	 * @throws InvalidDataException If this request is to be rejected
 	 */
-	void handleHandshake(WebSocket conn, Draft draft, ClientHandshake request, Map<String, String> paramMap) throws InvalidDataException;
+	ClientData handleHandshake(WebSocket conn, Draft draft, ClientHandshake request, Map<String, String> paramMap) throws InvalidDataException;
 	
 	/**
 	 * Sends a message signaling the client that the connection is OK to use

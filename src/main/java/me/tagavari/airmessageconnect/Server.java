@@ -112,29 +112,45 @@ public class Server extends WebSocketServer {
 		Protocol protocol = Communications.getProtocol(commVer);
 		if(protocol == null) {
 			Main.getLogger().log(Level.FINE, "Rejecting handshake (bad communications version - " + commVer + ") from client " + Main.connectionToString(conn));
-			throw new InvalidDataException(CloseFrame.POLICY_VALIDATION, "Bad communications version " + commVer);
+			
+			//Disconnect the client with our custom close code
+			conn.setAttachment(new ClientData(SharedData.closeCodeIncompatibleProtocol));
+			return builder;
 		}
 		
-		//Running handshake validation through the protocol
-		protocol.handleHandshake(conn, draft, request, queryParams);
-		
-		//Accepting the request
-		return builder;
+		try {
+			//Running handshake validation through the protocol
+			ClientData clientData = protocol.handleHandshake(conn, draft, request, queryParams);
+			conn.setAttachment(clientData);
+			
+			//Accepting the request
+			return builder;
+		} catch(InvalidDataException exception) {
+			//Disconnect the client later if we're rejecting them with a custom close code
+			if(exception.getCloseCode() >= 4000 && exception.getCloseCode() < 5000) {
+				conn.setAttachment(new ClientData(exception.getCloseCode()));
+				return builder;
+			} else {
+				//Re-throw the exception and reject the handshake normally
+				throw exception;
+			}
+		}
 	}
 	
 	@Override
 	public void onOpen(WebSocket conn, ClientHandshake handshake) {
 		//Getting the connection data
 		ClientData clientData = conn.getAttachment();
-		ClientData.Type type = clientData.getType();
-		clientData.clearType();
 		
 		//Checking if the client is to be disconnected
-		if(type.getCloseCode() != -1) {
-			Main.getLogger().log(Level.FINE, "Disconnecting queued connection from " + Main.connectionToString(conn) + " (" + type.getCloseCode() + ")");
-			conn.close(type.getCloseCode());
+		if(clientData.isRejected()) {
+			Main.getLogger().log(Level.FINE, "Disconnecting rejected connection from " + Main.connectionToString(conn) + " (" + clientData.getCloseCode() + ")");
+			conn.close(clientData.getCloseCode());
 			return;
 		}
+		
+		ClientData.Type type = clientData.getType();
+		clientData.clearType();
 		
 		if(clientData.isServer()) {
 			//Adding a new collection for the server
@@ -165,11 +181,19 @@ public class Server extends WebSocketServer {
 	
 	@Override
 	public void onClose(WebSocket conn, int code, String reason, boolean remote) {
+		String logSuffix = "(" + code + " / " + reason + " / " + remote + ")";
+		
 		//Getting the client data
 		ClientData clientData = conn.getAttachment();
+		
+		//Logging disconnections of rejected clients
+		if(clientData.isRejected()) {
+			Main.getLogger().log(Level.FINE, "Rejected client disconnected from " + Main.connectionToString(conn) + " " + logSuffix);
+			return;
+		}
+		
 		ConnectionGroup group = clientData.getConnectionGroup();
 		
-		String logSuffix = "(" + code + " / " + reason + " / " + remote + ")";
 		if(group == null) {
 			//No group, nothing to do
 			//Just log the event
@@ -221,8 +245,13 @@ public class Server extends WebSocketServer {
 	
 	@Override
 	public void onMessage(WebSocket conn, ByteBuffer message) {
-		//Forwarding the message for the protocol to handle
+		//Getting the client's data
 		ClientData clientData = conn.getAttachment();
+		
+		//Ignoring if this client is rejected
+		if(clientData.isRejected()) return;
+		
+		//Forwarding the message for the protocol to handle
 		conn.<ClientData>getAttachment().getProtocol().receive(conn, clientData, message);
 	}
 	
