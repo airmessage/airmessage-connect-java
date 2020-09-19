@@ -14,14 +14,15 @@ public class StorageUtils {
 	private static final StorageUtils storageUtils = new StorageUtils();
 	
 	//Database structure
-	private static final String fieldUsersRelayID = "relay_id";
-	private static final String fieldUsersServerInstallationID = "server_id";
-	//private static final String fieldUsersIsSubscribed = "is_subscribed";
-	//private static final String fieldUsersSubscriptionSource = "subscription_source";
+	private static final String fieldUsersRelayID = "relayID";
+	private static final String fieldUsersServerInstallationID = "severID";
+	private static final String fieldUsersIsActivated = "isActivated";
+	//private static final String fieldUsersIsSubscribed = "isSubscribed";
+	//private static final String fieldUsersSubscriptionSource = "subscriptionSource";
 	
 	private static final String collectionUsersData = "data";
 	private static final String documentDataFCM = "fcm";
-	private static final String fieldFCMList = "fcm_token_list";
+	private static final String fieldFCMList = "fcmTokenList";
 	
 	//Database references
 	private Firestore db;
@@ -63,7 +64,7 @@ public class StorageUtils {
 				unboxInt(documentSnapshot.get(fieldUsersSubscriptionSource), 0)
 		); */
 		try {
-			return new DocumentUser(documentSnapshot.getString(fieldUsersRelayID), documentSnapshot.getString(fieldUsersServerInstallationID));
+			return new DocumentUser(documentSnapshot.getString(fieldUsersRelayID), documentSnapshot.getString(fieldUsersServerInstallationID), unboxBoolean(documentSnapshot.getBoolean(fieldUsersIsActivated)));
 		} catch(RuntimeException exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
 			return null;

@@ -265,10 +265,10 @@ public class Protocol1 implements Protocol {
 					
 					if(!Main.isUnlinked()) {
 						//Rejecting if this user doesn't have a subscription
-						if(!StorageUtils.instance().checkSubscription(userID)) {
+						/* if(!StorageUtils.instance().checkSubscription(userID)) {
 							Main.getLogger().log(Level.WARNING, "Rejecting handshake (no subscription) from client " + Main.connectionToString(conn));
 							throw new InvalidDataException(SharedData.closeCodeNoSubscription);
-						}
+						} */
 						
 						//Fetching user details
 						DocumentUser documentUser = StorageUtils.instance().getDocumentUser(userID);
@@ -277,6 +277,12 @@ public class Protocol1 implements Protocol {
 						if(documentUser == null || !installationID.equals(documentUser.installationID)) {
 							Main.getLogger().log(Level.WARNING, "Rejecting handshake (token refresh) from client " + Main.connectionToString(conn));
 							throw new InvalidDataException(SharedData.closeCodeServerTokenRefresh);
+						}
+						
+						//Rejecting if this user isn't activated
+						if(checkActivation(documentUser)) {
+							Main.getLogger().log(Level.WARNING, "Rejecting handshake (account not activated) from client " + Main.connectionToString(conn));
+							throw new InvalidDataException(SharedData.closeCodeNoSubscription);
 						}
 						
 						//Updating the relay ID for this user (if necessary)
@@ -338,8 +344,14 @@ public class Protocol1 implements Protocol {
 			}
 			
 			//Rejecting if this user doesn't have a subscription
-			if(!StorageUtils.instance().checkSubscription(userID)) {
+			/* if(!StorageUtils.instance().checkSubscription(userID)) {
 				Main.getLogger().log(Level.WARNING, "Rejecting handshake (no subscription) from client " + Main.connectionToString(conn));
+				throw new InvalidDataException(SharedData.closeCodeNoSubscription);
+			} */
+			
+			//Rejecting if this user isn't activated
+			if(!checkActivation(userID)) {
+				Main.getLogger().log(Level.WARNING, "Rejecting handshake (not activated) from client " + Main.connectionToString(conn));
 				throw new InvalidDataException(SharedData.closeCodeNoSubscription);
 			}
 			
@@ -349,6 +361,14 @@ public class Protocol1 implements Protocol {
 			//Just use the ID token as the user ID
 			return idToken;
 		}
+	}
+	
+	private static boolean checkActivation(String userID) throws ExecutionException, InterruptedException {
+		return checkActivation(StorageUtils.instance().getDocumentUser(userID));
+	}
+	
+	private static boolean checkActivation(DocumentUser user) {
+		return user != null && user.isActivated;
 	}
 	
 	@Override

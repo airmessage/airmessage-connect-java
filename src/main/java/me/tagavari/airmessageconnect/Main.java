@@ -74,7 +74,7 @@ public class Main {
 		if(!isUnlinked()) {
 			//Initializing Firebase
 			try {
-				FirebaseOptions options = new FirebaseOptions.Builder()
+				FirebaseOptions options = FirebaseOptions.builder()
 						.setCredentials(GoogleCredentials.getApplicationDefault())
 						.build();
 				
@@ -112,7 +112,7 @@ public class Main {
 	}
 	
 	public static String getRelayID() {
-		return "relay-dev";
+		return "relay-zero";
 	}
 	
 	private static Formatter getLoggerFormatter() {
