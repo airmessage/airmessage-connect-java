@@ -280,7 +280,7 @@ public class Protocol1 implements Protocol {
 						}
 						
 						//Rejecting if this user isn't activated
-						if(checkActivation(documentUser)) {
+						if(!checkActivation(documentUser)) {
 							Main.getLogger().log(Level.WARNING, "Rejecting handshake (account not activated) from client " + Main.connectionToString(conn));
 							throw new InvalidDataException(SharedData.closeCodeNoSubscription);
 						}
