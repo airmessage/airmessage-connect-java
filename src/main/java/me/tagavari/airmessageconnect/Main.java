@@ -7,6 +7,7 @@ import org.java_websocket.WebSocket;
 import org.java_websocket.server.CustomSSLWebSocketServerFactory;
 import org.java_websocket.server.WebSocketServer;
 
+import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import java.io.File;
@@ -93,7 +94,7 @@ public class Main {
 		
 		if(!Main.isInsecure()) {
 			//Loading the SSL context
-			SSLContext sslContext = SecurityUtils.loadPEM(new File("certificate.pem"));
+			SSLContext sslContext = SecurityUtils.loadPEM(new File(System.getenv("SERVER_CERTIFICATE")));
 			if(sslContext == null) {
 				return;
 			} else {
