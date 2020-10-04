@@ -3,6 +3,7 @@ package me.tagavari.airmessageconnect;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
+import io.sentry.*;
 import org.java_websocket.WebSocket;
 import org.java_websocket.server.CustomSSLWebSocketServerFactory;
 import org.java_websocket.server.WebSocketServer;
@@ -23,9 +24,11 @@ import java.util.Date;
 import java.util.logging.*;
 
 public class Main {
+	public static final String VERSION = "1.0.0";
 	private static final int port = 1259;
 	
 	private static final File logFile = new File("logs", "latest.log");
+	private static final Formatter loggerFormatter = getLoggerFormatter();
 	
 	private static Logger logger;
 	
@@ -42,7 +45,7 @@ public class Main {
 		{
 			ConsoleHandler handler = new ConsoleHandler();
 			handler.setLevel(Level.FINEST);
-			handler.setFormatter(getLoggerFormatter());
+			handler.setFormatter(loggerFormatter);
 			logger.addHandler(handler);
 		}
 		try {
@@ -51,11 +54,40 @@ public class Main {
 			
 			FileHandler handler = new FileHandler(logFile.getPath());
 			handler.setLevel(Level.FINEST);
-			handler.setFormatter(getLoggerFormatter());
+			handler.setFormatter(loggerFormatter);
 			logger.addHandler(handler);
 		} catch(IOException exception) {
 			Main.getLogger().log(Level.SEVERE, "Failed to initialize log file - continuing without saving logs to disk");
 		}
+		{
+			logger.addHandler(new Handler() {
+				@Override
+				public void publish(LogRecord record) {
+					if(record.getLevel() == Level.SEVERE) {
+						Throwable thrown = record.getThrown();
+						if(thrown != null) {
+							Sentry.captureException(thrown);
+						} else {
+							Sentry.captureMessage(loggerFormatter.formatMessage(record), SentryLevel.FATAL);
+						}
+					} else {
+						Sentry.addBreadcrumb(loggerFormatter.formatMessage(record));
+					}
+				}
+				
+				@Override
+				public void flush() {
+				
+				}
+				
+				@Override
+				public void close() throws SecurityException {
+				
+				}
+			});
+		}
+		
+		Main.getLogger().log(Level.INFO, "Starting AirMessage Connect version " + VERSION);
 		
 		//Reading the arguments
 		for(String argument : args) {
@@ -72,6 +104,15 @@ public class Main {
 			}
 		}
 		
+		if(!isUnlinked() && !isInsecure()) {
+			//Initializing Sentry
+			Sentry.init(options -> {
+				options.setEnableExternalConfiguration(true);
+				options.setRelease("airmessage-server@" + VERSION);
+			});
+			Main.getLogger().log(Level.INFO, "Sentry initialized");
+		}
+		
 		if(!isUnlinked()) {
 			//Initializing Firebase
 			try {
@@ -84,9 +125,11 @@ public class Main {
 				Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
 				return;
 			}
+			Main.getLogger().log(Level.INFO, "Firebase initialized");
 			
 			//Initializing data utils
 			StorageUtils.instance().initialize();
+			Main.getLogger().log(Level.INFO, "Firestore initialized");
 		}
 		
 		//Creating the server
@@ -94,7 +137,13 @@ public class Main {
 		
 		if(!Main.isInsecure()) {
 			//Loading the SSL context
-			SSLContext sslContext = SecurityUtils.loadPEM(new File(System.getenv("SERVER_CERTIFICATE")));
+			String certificatePath = System.getenv("SERVER_CERTIFICATE");
+			if(certificatePath == null) {
+				Main.getLogger().log(Level.SEVERE, "No variable SERVER_CERTIFICATE provided");
+				return;
+			}
+			
+			SSLContext sslContext = SecurityUtils.loadPEM(new File(certificatePath));
 			if(sslContext == null) {
 				return;
 			} else {

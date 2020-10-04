@@ -17,6 +17,8 @@ dependencies {
     implementation "org.slf4j:slf4j-nop:1.7.30"
 
     implementation "com.google.firebase:firebase-admin:7.0.0"
+
+    implementation "io.sentry:sentry:3.0.0"
 }
 
 jar {
