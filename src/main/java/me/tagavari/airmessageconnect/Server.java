@@ -1,5 +1,10 @@
 package me.tagavari.airmessageconnect;
 
+import io.sentry.Sentry;
+import io.sentry.SentryEvent;
+import io.sentry.SentryLevel;
+import io.sentry.protocol.Request;
+import io.sentry.protocol.User;
 import me.tagavari.airmessageconnect.communicate.Communications;
 import me.tagavari.airmessageconnect.communicate.Protocol;
 import me.tagavari.airmessageconnect.structure.ConnectionCollection;
@@ -16,6 +21,7 @@ import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.logging.Level;
@@ -44,6 +50,14 @@ public class Server extends WebSocketServer {
 	
 	@Override
 	public ServerHandshakeBuilder onWebsocketHandshakeReceivedAsServer(WebSocket conn, Draft draft, ClientHandshake request) throws InvalidDataException {
+		//Updating Sentry with the current scope
+		Sentry.configureScope(scope -> {
+			User user = new User();
+			user.setIpAddress(Main.getIP(conn));
+			scope.setUser(user);
+		});
+		
+		//Calling the super method
 		ServerHandshakeBuilder builder = super.onWebsocketHandshakeReceivedAsServer(conn, draft, request);
 		
 		//Logging the event
@@ -103,8 +117,7 @@ public class Server extends WebSocketServer {
 		try {
 			commVer = Integer.parseInt(queryParams.get("communications"));
 		} catch(NumberFormatException exception) {
-			Main.getLogger().log(Level.FINE, "Rejecting handshake (bad communications string - " + queryParams.get("communications") + ") from client " + Main.connectionToString(conn));
-			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+			Main.getLogger().log(Level.WARNING, "Rejecting handshake (bad communications string - " + queryParams.get("communications") + ") from client " + Main.connectionToString(conn) + ": " + exception.getMessage(), exception);
 			throw new InvalidDataException(CloseFrame.PROTOCOL_ERROR);
 		}
 		
@@ -139,44 +152,60 @@ public class Server extends WebSocketServer {
 	
 	@Override
 	public void onOpen(WebSocket conn, ClientHandshake handshake) {
-		//Getting the connection data
-		ClientData clientData = conn.getAttachment();
-		
-		//Checking if the client is to be disconnected
-		if(clientData.isRejected()) {
-			Main.getLogger().log(Level.FINE, "Disconnecting rejected connection from " + Main.connectionToString(conn) + " (" + clientData.getCloseCode() + ")");
-			conn.close(clientData.getCloseCode());
-			return;
-		}
-		
-		ClientData.Type type = clientData.getType();
-		clientData.clearType();
-		
-		if(clientData.isServer()) {
-			//Adding a new collection for the server
-			connectionCollection.addServer(conn, type.getGroupID());
-		} else {
-			//Adding the client to a group
-			boolean result = connectionCollection.addClient(conn, type.getGroupID(), type.getFCMToken());
+		//Updating Sentry with the current scope
+		Sentry.withScope(scope -> {
+			User user = new User();
+			user.setIpAddress(Main.getIP(conn));
+			scope.setUser(user);
 			
-			//Notifying the server of the addition
-			if(result) {
-				WebSocket serverSocket = clientData.getConnectionGroup().getConnectionServer();
-				serverSocket.send(serverSocket.<ClientData>getAttachment().getProtocol().sendServerConnection(clientData.getConnectionID()));
-			} else {
+			//Getting the connection data
+			ClientData clientData = conn.getAttachment();
+			
+			//Checking if the client is to be disconnected
+			if(clientData.isRejected()) {
+				Main.getLogger().log(Level.FINE, "Disconnecting rejected connection from " + Main.connectionToString(conn) + " (" + clientData.getCloseCode() + ")");
+				conn.close(clientData.getCloseCode());
 				return;
 			}
-		}
-		
-		//Sending the connection OK message
-		conn.send(clientData.getProtocol().sendSharedConnectionOK());
-		
-		//Logging the event
-		if(clientData.isServer()) {
-			Main.getLogger().log(Level.FINE, "Server of group " + clientData.getConnectionGroup().getGroupID() + " connected from " + Main.connectionToString(conn));
-		} else {
-			Main.getLogger().log(Level.FINE, "Client " + clientData.getConnectionID() + " of " + clientData.getConnectionGroup().getGroupID() + " connected from " + Main.connectionToString(conn));
-		}
+			
+			//Getting the client type
+			ClientData.Type type = clientData.getType();
+			clientData.clearType();
+			
+			//Updating the user
+			user.setId(type.getGroupID());
+			user.setOthers(Map.of(
+				"client_id", clientData.isServer() ? "server" : Integer.toString(clientData.getConnectionID()),
+				"protocol_version", Integer.toString(clientData.getProtocol().getVersion())
+			));
+			scope.setUser(user);
+			
+			if(clientData.isServer()) {
+				//Adding a new collection for the server
+				connectionCollection.addServer(conn, type.getGroupID());
+			} else {
+				//Adding the client to a group
+				boolean result = connectionCollection.addClient(conn, type.getGroupID(), type.getFCMToken());
+				
+				//Notifying the server of the addition
+				if(result) {
+					WebSocket serverSocket = clientData.getConnectionGroup().getConnectionServer();
+					serverSocket.send(serverSocket.<ClientData>getAttachment().getProtocol().sendServerConnection(clientData.getConnectionID()));
+				} else {
+					return;
+				}
+			}
+			
+			//Sending the connection OK message
+			conn.send(clientData.getProtocol().sendSharedConnectionOK());
+			
+			//Logging the event
+			if(clientData.isServer()) {
+				Main.getLogger().log(Level.FINE, "Server of group " + clientData.getConnectionGroup().getGroupID() + " connected from " + Main.connectionToString(conn));
+			} else {
+				Main.getLogger().log(Level.FINE, "Client " + clientData.getConnectionID() + " of " + clientData.getConnectionGroup().getGroupID() + " connected from " + Main.connectionToString(conn));
+			}
+		});
 	}
 	
 	@Override
@@ -192,55 +221,58 @@ public class Server extends WebSocketServer {
 			return;
 		}
 		
-		ConnectionGroup group = clientData.getConnectionGroup();
-		
-		if(group == null) {
-			//No group, nothing to do
-			//Just log the event
-			if(clientData.isServer()) {
-				Main.getLogger().log(Level.FINE, "Server disconnected from " + Main.connectionToString(conn) + " " + logSuffix);
+		//Updating Sentry with the current scope
+		withSentryScope(conn, clientData, () -> {
+			ConnectionGroup group = clientData.getConnectionGroup();
+			
+			if(group == null) {
+				//No group, nothing to do
+				//Just log the event
+				if(clientData.isServer()) {
+					Main.getLogger().log(Level.FINE, "Server disconnected from " + Main.connectionToString(conn) + " " + logSuffix);
+				} else {
+					Main.getLogger().log(Level.FINE, "Client disconnected from " + Main.connectionToString(conn) + " " + logSuffix);
+				}
 			} else {
-				Main.getLogger().log(Level.FINE, "Client disconnected from " + Main.connectionToString(conn) + " " + logSuffix);
-			}
-		} else {
-			//Log the event and clean up
-			if(clientData.isServer()) {
-				if(!clientData.getDisableCleanup()) {
-					//Unregistering the group and disconnecting all clients
-					group.closeAll(SharedData.closeCodeNoGroup);
-					connectionCollection.removeGroup(group.getGroupID());
-					
-					//Writing the group's client FCM tokens to the database (if modifications were made)
-					if(group.isClientFCMTokenListModified()) {
-						if(!Main.isUnlinked()) {
-							try {
-								StorageUtils.instance().updateFCMTokens(group.getGroupID(), group.getClientFCMTokenList());
-							} catch(ExecutionException | InterruptedException exception) {
-								Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+				//Log the event and clean up
+				if(clientData.isServer()) {
+					if(!clientData.getDisableCleanup()) {
+						//Unregistering the group and disconnecting all clients
+						group.closeAll(SharedData.closeCodeNoGroup);
+						connectionCollection.removeGroup(group.getGroupID());
+						
+						//Writing the group's client FCM tokens to the database (if modifications were made)
+						if(group.isClientFCMTokenListModified()) {
+							if(!Main.isUnlinked()) {
+								try {
+									StorageUtils.instance().updateFCMTokens(group.getGroupID(), group.getClientFCMTokenList());
+								} catch(ExecutionException | InterruptedException exception) {
+									Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
+								}
 							}
 						}
 					}
-				}
-				
-				//Logging the event
-				Main.getLogger().log(Level.FINE, "Server of group " + group.getGroupID() + " disconnected from " + Main.connectionToString(conn) + " " + logSuffix);
-			} else {
-				//Getting the disconnected client's connection ID
-				int connectionID = clientData.getConnectionID();
-				
-				if(!clientData.getDisableCleanup()) {
-					//Unregistering the connection if the connection is a client
-					group.removeClient(connectionID);
 					
-					//Notifying the server of the disconnection
-					WebSocket serverSocket = clientData.getConnectionGroup().getConnectionServer();
-					serverSocket.send(serverSocket.<ClientData>getAttachment().getProtocol().sendServerDisconnection(connectionID));
+					//Logging the event
+					Main.getLogger().log(Level.FINE, "Server of group " + group.getGroupID() + " disconnected from " + Main.connectionToString(conn) + " " + logSuffix);
+				} else {
+					//Getting the disconnected client's connection ID
+					int connectionID = clientData.getConnectionID();
+					
+					if(!clientData.getDisableCleanup()) {
+						//Unregistering the connection if the connection is a client
+						group.removeClient(connectionID);
+						
+						//Notifying the server of the disconnection
+						WebSocket serverSocket = clientData.getConnectionGroup().getConnectionServer();
+						serverSocket.send(serverSocket.<ClientData>getAttachment().getProtocol().sendServerDisconnection(connectionID));
+					}
+					
+					//Logging the event
+					Main.getLogger().log(Level.FINE, "Client " + clientData.getConnectionID() + " of " + group.getGroupID() + " disconnected from " + Main.connectionToString(conn) + " " + logSuffix);
 				}
-				
-				//Logging the event
-				Main.getLogger().log(Level.FINE, "Client " + clientData.getConnectionID() + " of " + group.getGroupID() + " disconnected from " + Main.connectionToString(conn) + " " + logSuffix);
 			}
-		}
+		});
 	}
 	
 	@Override
@@ -251,8 +283,11 @@ public class Server extends WebSocketServer {
 		//Ignoring if this client is rejected
 		if(clientData.isRejected()) return;
 		
-		//Forwarding the message for the protocol to handle
-		conn.<ClientData>getAttachment().getProtocol().receive(conn, clientData, message);
+		//Updating Sentry with the current scope
+		withSentryScope(conn, clientData, () -> {
+			//Forwarding the message for the protocol to handle
+			conn.<ClientData>getAttachment().getProtocol().receive(conn, clientData, message);
+		});
 	}
 	
 	@Override
@@ -262,7 +297,30 @@ public class Server extends WebSocketServer {
 	
 	@Override
 	public void onError(WebSocket conn, Exception exception) {
-		//Logging the exception
-		Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+		Runnable runnableLog = () -> Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+		
+		//Updating Sentry with the current scope
+		ClientData clientData = conn.getAttachment();
+		if(!clientData.isRejected()) {
+			withSentryScope(conn, clientData, runnableLog);
+		} else {
+			//Just log the exception without Sentry
+			runnableLog.run();
+		}
+	}
+	
+	private static void withSentryScope(WebSocket conn, ClientData clientData, Runnable callback) {
+		//Updating Sentry with the current scope
+		Sentry.withScope(scope -> {
+			User user = new User();
+			user.setIpAddress(Main.getIP(conn));
+			user.setId(clientData.getConnectionGroup().getGroupID());
+			user.setOthers(Map.of(
+				"client_id", clientData.isServer() ? "server" : Integer.toString(clientData.getConnectionID()),
+				"protocol_version", Integer.toString(clientData.getProtocol().getVersion())
+			));
+			scope.setUser(user);
+			callback.run();
+		});
 	}
 }

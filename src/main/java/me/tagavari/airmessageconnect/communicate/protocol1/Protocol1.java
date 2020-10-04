@@ -34,6 +34,13 @@ import java.util.concurrent.ExecutionException;
 import java.util.logging.Level;
 
 public class Protocol1 implements Protocol {
+	public static final int VERSION = 1;
+	
+	@Override
+	public int getVersion() {
+		return VERSION;
+	}
+	
 	@Override
 	public void receive(WebSocket conn, ClientData clientData, ByteBuffer bytes) {
 		try {
@@ -228,8 +235,7 @@ public class Protocol1 implements Protocol {
 			userID = paramMap.get("user_id");
 			fcmToken = paramMap.get("fcm_token");
 		} catch(NumberFormatException exception) {
-			Main.getLogger().log(Level.WARNING, "Rejecting handshake (bad request format) from client " + Main.connectionToString(conn));
-			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+			Main.getLogger().log(Level.WARNING, "Rejecting handshake (bad request format) from client " + Main.connectionToString(conn) + ": " + exception.getMessage(), exception);
 			throw new InvalidDataException(CloseFrame.PROTOCOL_ERROR);
 		}
 		
@@ -301,8 +307,7 @@ public class Protocol1 implements Protocol {
 				userID = validateIdToken(conn, idToken);
 			}
 		} catch(ExecutionException | InterruptedException exception) {
-			Main.getLogger().log(Level.WARNING, "Rejecting handshake (internal exception) from client " + Main.connectionToString(conn));
-			Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+			Main.getLogger().log(Level.WARNING, "Rejecting handshake (internal exception) from client " + Main.connectionToString(conn) + ": " + exception.getMessage(), exception);
 			
 			//Internal error
 			throw new InvalidDataException(CloseFrame.TRY_AGAIN_LATER);
@@ -334,12 +339,10 @@ public class Protocol1 implements Protocol {
 				FirebaseToken decodedToken = FirebaseAuth.getInstance().verifyIdToken(idToken);
 				userID = decodedToken.getUid();
 			} catch(IllegalArgumentException exception) {
-				Main.getLogger().log(Level.WARNING, "Rejecting handshake (illegal Firebase state) from client " + Main.connectionToString(conn));
-				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+				Main.getLogger().log(Level.WARNING, "Rejecting handshake (illegal Firebase state) from client " + Main.connectionToString(conn) + ": " + exception.getMessage(), exception);
 				throw new InvalidDataException(CloseFrame.PROTOCOL_ERROR);
 			} catch(FirebaseAuthException exception) {
-				Main.getLogger().log(Level.WARNING, "Rejecting handshake (token validation error) from client " + Main.connectionToString(conn));
-				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+				Main.getLogger().log(Level.WARNING, "Rejecting handshake (token validation error) from client " + Main.connectionToString(conn) + ": " + exception.getMessage(), exception);
 				throw new InvalidDataException(SharedData.closeCodeAccountValidation);
 			}
 			

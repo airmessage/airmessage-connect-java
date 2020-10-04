@@ -63,12 +63,15 @@ public class Main {
 			logger.addHandler(new Handler() {
 				@Override
 				public void publish(LogRecord record) {
-					if(record.getLevel() == Level.SEVERE) {
+					if(record.getLevel() == Level.WARNING || record.getLevel() == Level.SEVERE) {
 						Throwable thrown = record.getThrown();
+						SentryLevel level = record.getLevel() == Level.SEVERE ? SentryLevel.FATAL : SentryLevel.WARNING;
 						if(thrown != null) {
-							Sentry.captureException(thrown);
+							SentryEvent event = new SentryEvent(thrown);
+							event.setLevel(level);
+							Sentry.captureEvent(event);
 						} else {
-							Sentry.captureMessage(loggerFormatter.formatMessage(record), SentryLevel.FATAL);
+							Sentry.captureMessage(loggerFormatter.formatMessage(record), level);
 						}
 					} else {
 						Sentry.addBreadcrumb(loggerFormatter.formatMessage(record));
@@ -180,6 +183,12 @@ public class Main {
 				return dateFormat.format(record.getMillis()) + ' ' + '[' + record.getLevel().toString() + ']' + ' ' + formatMessage(record) + '\n' + stackTrace;
 			}
 		};
+	}
+	
+	public static String getIP(WebSocket connection) {
+		InetAddress address = connection.getRemoteSocketAddress().getAddress();
+		if(address == null) return null;
+		return address.getHostAddress();
 	}
 	
 	public static String connectionToString(WebSocket connection) {

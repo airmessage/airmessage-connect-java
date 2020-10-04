@@ -7,12 +7,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class Communications {
-	private static final Map<Integer, Protocol> protocols;
-	static {
-		Map<Integer, Protocol> map = new HashMap<>();
-		map.put(1, new Protocol1());
-		protocols = Collections.unmodifiableMap(map);
-	}
+	private static final Map<Integer, Protocol> protocols = Map.of(
+		Protocol1.VERSION, new Protocol1()
+	);
 	
 	public static Protocol getProtocol(int commVer) {
 		return protocols.get(commVer);

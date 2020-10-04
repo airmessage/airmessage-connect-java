@@ -11,6 +11,12 @@ import java.util.Map;
 
 public interface Protocol {
 	/**
+	 * Get the version number of this protocol
+	 * @return The version number of this protocol
+	 */
+	int getVersion();
+	
+	/**
 	 * Process incoming data
 	 * @param conn The connection of this event
 	 * @param clientData The data of this client
