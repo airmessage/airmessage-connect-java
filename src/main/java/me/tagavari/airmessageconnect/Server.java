@@ -1,8 +1,6 @@
 package me.tagavari.airmessageconnect;
 
-import io.sentry.Sentry;
-import io.sentry.SentryEvent;
-import io.sentry.SentryLevel;
+import io.sentry.*;
 import io.sentry.protocol.Request;
 import io.sentry.protocol.User;
 import me.tagavari.airmessageconnect.communicate.Communications;
@@ -153,11 +151,11 @@ public class Server extends WebSocketServer {
 	@Override
 	public void onOpen(WebSocket conn, ClientHandshake handshake) {
 		//Updating Sentry with the current scope
-		Sentry.withScope(scope -> {
+		withSentryScope(scope -> {
 			User user = new User();
 			user.setIpAddress(Main.getIP(conn));
 			scope.setUser(user);
-			
+		}, () -> {
 			//Getting the connection data
 			ClientData clientData = conn.getAttachment();
 			
@@ -173,12 +171,16 @@ public class Server extends WebSocketServer {
 			clientData.clearType();
 			
 			//Updating the user
-			user.setId(type.getGroupID());
-			user.setOthers(Map.of(
-				"client_id", clientData.isServer() ? "server" : Integer.toString(clientData.getConnectionID()),
-				"protocol_version", Integer.toString(clientData.getProtocol().getVersion())
-			));
-			scope.setUser(user);
+			Sentry.configureScope(scope -> {
+				User user = new User();
+				user.setIpAddress(Main.getIP(conn));
+				user.setId(type.getGroupID());
+				user.setOthers(Map.of(
+					"client_id", clientData.isServer() ? "server" : Integer.toString(clientData.getConnectionID()),
+					"protocol_version", Integer.toString(clientData.getProtocol().getVersion())
+				));
+				scope.setUser(user);
+			});
 			
 			if(clientData.isServer()) {
 				//Adding a new collection for the server
@@ -222,7 +224,7 @@ public class Server extends WebSocketServer {
 		}
 		
 		//Updating Sentry with the current scope
-		withSentryScope(conn, clientData, () -> {
+		withSentryScopeGenerated(conn, clientData, () -> {
 			ConnectionGroup group = clientData.getConnectionGroup();
 			
 			if(group == null) {
@@ -284,7 +286,7 @@ public class Server extends WebSocketServer {
 		if(clientData.isRejected()) return;
 		
 		//Updating Sentry with the current scope
-		withSentryScope(conn, clientData, () -> {
+		withSentryScopeGenerated(conn, clientData, () -> {
 			//Forwarding the message for the protocol to handle
 			conn.<ClientData>getAttachment().getProtocol().receive(conn, clientData, message);
 		});
@@ -297,21 +299,33 @@ public class Server extends WebSocketServer {
 	
 	@Override
 	public void onError(WebSocket conn, Exception exception) {
-		Runnable runnableLog = () -> Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+		if(conn != null) {
+			ClientData clientData = conn.getAttachment();
+			if(!clientData.isRejected()) {
+				withSentryScopeGenerated(conn, clientData, () -> Main.getLogger().log(Level.WARNING, exception.getMessage(), exception));
+			}
+		}
 		
-		//Updating Sentry with the current scope
-		ClientData clientData = conn.getAttachment();
-		if(!clientData.isRejected()) {
-			withSentryScope(conn, clientData, runnableLog);
+		Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+	}
+	
+	private static void withSentryScope(ScopeCallback scope, Runnable runnable) {
+		if(Sentry.isEnabled()) {
+			try {
+				Sentry.pushScope();
+				Sentry.configureScope(scope);
+				runnable.run();
+			} finally {
+				Sentry.popScope();
+			}
 		} else {
-			//Just log the exception without Sentry
-			runnableLog.run();
+			runnable.run();
 		}
 	}
 	
-	private static void withSentryScope(WebSocket conn, ClientData clientData, Runnable callback) {
+	private static void withSentryScopeGenerated(WebSocket conn, ClientData clientData, Runnable callback) {
 		//Updating Sentry with the current scope
-		Sentry.withScope(scope -> {
+		withSentryScope(scope -> {
 			User user = new User();
 			user.setIpAddress(Main.getIP(conn));
 			user.setId(clientData.getConnectionGroup().getGroupID());
@@ -320,7 +334,6 @@ public class Server extends WebSocketServer {
 				"protocol_version", Integer.toString(clientData.getProtocol().getVersion())
 			));
 			scope.setUser(user);
-			callback.run();
-		});
+		}, callback);
 	}
 }
