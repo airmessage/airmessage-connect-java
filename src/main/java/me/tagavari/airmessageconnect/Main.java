@@ -111,7 +111,7 @@ public class Main {
 			//Initializing Sentry
 			Sentry.init(options -> {
 				options.setEnableExternalConfiguration(true);
-				options.setRelease("airmessage-server@" + VERSION);
+				options.setRelease("airmessage-connect@" + VERSION);
 			});
 			Main.getLogger().log(Level.INFO, "Sentry initialized");
 		}
