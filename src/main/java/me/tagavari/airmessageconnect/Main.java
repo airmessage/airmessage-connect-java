@@ -157,7 +157,18 @@ public class Main {
 		}
 		
 		//Starting the server
+		server.setReuseAddr(true);
 		server.start();
+		
+		//Adding a shutdown hook
+		/* Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+			//Stopping the server
+			try {
+				server.stop();
+			} catch(IOException | InterruptedException exception) {
+				Main.getLogger().log(Level.WARNING, exception.getMessage(), exception);
+			}
+		})); */
 	}
 	
 	public static Logger getLogger() {
