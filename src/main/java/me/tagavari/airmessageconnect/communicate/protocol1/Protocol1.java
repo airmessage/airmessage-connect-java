@@ -183,6 +183,9 @@ public class Protocol1 implements Protocol {
 					if(tokens.isEmpty()) break;
 					MulticastMessage message = MulticastMessage.builder()
 							.addAllTokens(tokens)
+							.setAndroidConfig(AndroidConfig.builder()
+								.setPriority(AndroidConfig.Priority.HIGH)
+								.build())
 							.build();
 					ApiFuture<BatchResponse> responseFuture = FirebaseMessaging.getInstance().sendMulticastAsync(message);
 					ApiFutures.addCallback(responseFuture, new ApiFutureCallback<>() {
