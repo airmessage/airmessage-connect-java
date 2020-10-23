@@ -1,5 +1,8 @@
 package me.tagavari.airmessageconnect.communicate.protocol1;
 
+import com.google.api.client.auth.openidconnect.IdToken;
+import com.google.api.client.googleapis.util.Utils;
+import com.google.api.client.json.gson.GsonFactory;
 import com.google.api.core.ApiFuture;
 import com.google.api.core.ApiFutureCallback;
 import com.google.api.core.ApiFutures;
@@ -21,6 +24,7 @@ import org.java_websocket.exceptions.InvalidDataException;
 import org.java_websocket.framing.CloseFrame;
 import org.java_websocket.handshake.ClientHandshake;
 
+import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.nio.BufferUnderflowException;
@@ -183,6 +187,9 @@ public class Protocol1 implements Protocol {
 					if(tokens.isEmpty()) break;
 					MulticastMessage message = MulticastMessage.builder()
 							.addAllTokens(tokens)
+							.setAndroidConfig(AndroidConfig.builder()
+								.setPriority(AndroidConfig.Priority.HIGH)
+								.build())
 							.build();
 					ApiFuture<BatchResponse> responseFuture = FirebaseMessaging.getInstance().sendMulticastAsync(message);
 					ApiFutures.addCallback(responseFuture, new ApiFutureCallback<>() {
@@ -306,7 +313,7 @@ public class Protocol1 implements Protocol {
 				//Validating the user's ID token
 				userID = validateIdToken(conn, idToken);
 			}
-		} catch(ExecutionException | InterruptedException exception) {
+		} catch(ExecutionException | InterruptedException | IOException exception) {
 			Main.getLogger().log(Level.WARNING, "Rejecting handshake (internal exception) from client " + Main.connectionToString(conn) + ": " + exception.getMessage(), exception);
 			
 			//Internal error
@@ -326,7 +333,7 @@ public class Protocol1 implements Protocol {
 	 * @throws ExecutionException StorageUtils exception
 	 * @throws InterruptedException StorageUtils exception
 	 */
-	private static String validateIdToken(WebSocket conn, String idToken) throws InvalidDataException, ExecutionException, InterruptedException {
+	private static String validateIdToken(WebSocket conn, String idToken) throws InvalidDataException, ExecutionException, InterruptedException, IOException {
 		//Failing if no ID token was provided
 		if(idToken == null) {
 			Main.getLogger().log(Level.WARNING, "Rejecting handshake (no ID token provided) from client " + Main.connectionToString(conn));
@@ -361,8 +368,8 @@ public class Protocol1 implements Protocol {
 			//Returning the user's ID
 			return userID;
 		} else {
-			//Just use the ID token as the user ID
-			return idToken;
+			//Parse without verification
+			return (String) IdToken.parse(Utils.getDefaultJsonFactory(), idToken).getPayload().get("sub");
 		}
 	}
 	
