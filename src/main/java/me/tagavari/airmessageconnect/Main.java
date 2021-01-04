@@ -25,7 +25,8 @@ import java.util.logging.*;
 
 public class Main {
 	public static final String VERSION = "1.0.1";
-	private static final int port = 1259;
+	private static final int port = 443;
+	private static final int userPort = 1259;
 	
 	private static final File logFile = new File("logs", "latest.log");
 	private static final Formatter loggerFormatter = getLoggerFormatter();
@@ -34,8 +35,10 @@ public class Main {
 	
 	private static final String argUnlinked = "unlinked";
 	private static final String argInsecure = "insecure";
+	private static final String argUserPort = "userport";
 	private static boolean isUnlinked = false;
 	private static boolean isInsecure = false;
+	private static boolean isUserPort = false;
 	
 	public static void main(String[] args) {
 		//Initializing the logger
@@ -102,6 +105,10 @@ public class Main {
 				if(isInsecure) continue;
 				isInsecure = true;
 				Main.getLogger().log(Level.INFO, "Server is running in INSECURE MODE. Traffic will not be encrypted. This functionality cannot be used in production.");
+			} else if(argUserPort.equals(argument)) {
+				if(isUserPort) continue;
+				isUserPort = true;
+				Main.getLogger().log(Level.INFO, "Server is running in USER PORT mode. The server will run on port " + userPort + " instead of " + port + ".");
 			} else {
 				Main.getLogger().log(Level.INFO, "Unknown argument provided: " + argument);
 			}
@@ -136,7 +143,7 @@ public class Main {
 		}
 		
 		//Creating the server
-		WebSocketServer server = new Server(new InetSocketAddress(port));
+		WebSocketServer server = new Server(new InetSocketAddress(isUserPort ? userPort : port));
 		
 		if(!Main.isInsecure()) {
 			//Loading the SSL context
