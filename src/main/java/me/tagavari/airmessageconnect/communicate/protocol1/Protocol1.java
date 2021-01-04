@@ -313,7 +313,7 @@ public class Protocol1 implements Protocol {
 				//Validating the user's ID token
 				userID = validateIdToken(conn, idToken);
 			}
-		} catch(ExecutionException | InterruptedException | IOException exception) {
+		} catch(ExecutionException | InterruptedException exception) {
 			Main.getLogger().log(Level.WARNING, "Rejecting handshake (internal exception) from client " + Main.connectionToString(conn) + ": " + exception.getMessage(), exception);
 			
 			//Internal error
@@ -333,7 +333,7 @@ public class Protocol1 implements Protocol {
 	 * @throws ExecutionException StorageUtils exception
 	 * @throws InterruptedException StorageUtils exception
 	 */
-	private static String validateIdToken(WebSocket conn, String idToken) throws InvalidDataException, ExecutionException, InterruptedException, IOException {
+	private static String validateIdToken(WebSocket conn, String idToken) throws InvalidDataException, ExecutionException, InterruptedException {
 		//Failing if no ID token was provided
 		if(idToken == null) {
 			Main.getLogger().log(Level.WARNING, "Rejecting handshake (no ID token provided) from client " + Main.connectionToString(conn));
@@ -369,7 +369,16 @@ public class Protocol1 implements Protocol {
 			return userID;
 		} else {
 			//Parse without verification
-			return (String) IdToken.parse(Utils.getDefaultJsonFactory(), idToken).getPayload().get("sub");
+			if(idToken.startsWith("fake-")) {
+				return idToken;
+			} else {
+				try {
+					return (String) IdToken.parse(Utils.getDefaultJsonFactory(), idToken).getPayload().get("sub");
+				} catch(IOException exception) {
+					exception.printStackTrace();
+					return idToken;
+				}
+			}
 		}
 	}
 	

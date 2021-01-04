@@ -171,16 +171,18 @@ public class Server extends WebSocketServer {
 			clientData.clearType();
 			
 			//Updating the user
-			Sentry.configureScope(scope -> {
-				User user = new User();
-				user.setIpAddress(Main.getIP(conn));
-				user.setId(type.getGroupID());
-				user.setOthers(Map.of(
-					"client_id", clientData.isServer() ? "server" : Integer.toString(clientData.getConnectionID()),
-					"protocol_version", Integer.toString(clientData.getProtocol().getVersion())
-				));
-				scope.setUser(user);
-			});
+			if(Sentry.isEnabled()) {
+				Sentry.configureScope(scope -> {
+					User user = new User();
+					user.setIpAddress(Main.getIP(conn));
+					user.setId(type.getGroupID());
+					user.setOthers(Map.of(
+						"client_id", clientData.isServer() ? "server" : Integer.toString(clientData.getConnectionID()),
+						"protocol_version", Integer.toString(clientData.getProtocol().getVersion())
+					));
+					scope.setUser(user);
+				});
+			}
 			
 			if(clientData.isServer()) {
 				//Adding a new collection for the server

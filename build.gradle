@@ -1,6 +1,6 @@
 plugins {
     id "java"
-    id "com.github.johnrengelman.shadow" version "6.0.0"
+    id "com.github.johnrengelman.shadow" version "6.1.0"
 }
 
 group "org.airmessage"
@@ -16,9 +16,9 @@ dependencies {
     implementation "org.java-websocket:Java-WebSocket:1.5.1"
     implementation "org.slf4j:slf4j-nop:1.7.30"
 
-    implementation "com.google.firebase:firebase-admin:7.0.0"
+    implementation "com.google.firebase:firebase-admin:7.1.0"
 
-    implementation "io.sentry:sentry:3.0.0"
+    implementation "io.sentry:sentry:3.1.0"
 }
 
 jar {
@@ -27,4 +27,8 @@ jar {
                 "Main-Class": "me.tagavari.airmessageconnect.Main"
         )
     }
+}
+
+shadowJar {
+    archiveFileName = "airmessage-connect.${extension}"
 }
