@@ -1,14 +1,16 @@
 package me.tagavari.airmessageconnect;
 
-import io.sentry.*;
-import io.sentry.protocol.Request;
+import io.sentry.ScopeCallback;
+import io.sentry.Sentry;
 import io.sentry.protocol.User;
 import me.tagavari.airmessageconnect.communicate.Communications;
+import me.tagavari.airmessageconnect.communicate.HttpDraft;
 import me.tagavari.airmessageconnect.communicate.Protocol;
 import me.tagavari.airmessageconnect.structure.ConnectionCollection;
 import me.tagavari.airmessageconnect.structure.ConnectionGroup;
 import org.java_websocket.WebSocket;
 import org.java_websocket.drafts.Draft;
+import org.java_websocket.drafts.Draft_6455;
 import org.java_websocket.exceptions.InvalidDataException;
 import org.java_websocket.framing.CloseFrame;
 import org.java_websocket.handshake.ClientHandshake;
@@ -19,7 +21,7 @@ import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.Collections;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.logging.Level;
@@ -36,7 +38,7 @@ public class Server extends WebSocketServer {
 	private final ConnectionCollection connectionCollection = new ConnectionCollection();
 	
 	public Server(InetSocketAddress address) {
-		super(address);
+		super(address, Arrays.asList(new HttpDraft(), new Draft_6455()));
 		
 		setConnectionLostTimeout(10 * 60); //Every 10 mins
 	}
@@ -48,6 +50,10 @@ public class Server extends WebSocketServer {
 	
 	@Override
 	public ServerHandshakeBuilder onWebsocketHandshakeReceivedAsServer(WebSocket conn, Draft draft, ClientHandshake request) throws InvalidDataException {
+		if(HttpDraft.isHTTP(request)) {
+			return super.onWebsocketHandshakeReceivedAsServer(conn, draft, request);
+		}
+		
 		//Updating Sentry with the current scope
 		Sentry.configureScope(scope -> {
 			User user = new User();
@@ -150,6 +156,11 @@ public class Server extends WebSocketServer {
 	
 	@Override
 	public void onOpen(WebSocket conn, ClientHandshake handshake) {
+		if(HttpDraft.isHTTP(handshake)) {
+			conn.close();
+			return;
+		}
+		
 		//Updating Sentry with the current scope
 		withSentryScope(scope -> {
 			User user = new User();
@@ -218,6 +229,7 @@ public class Server extends WebSocketServer {
 		
 		//Getting the client data
 		ClientData clientData = conn.getAttachment();
+		if(clientData == null) return;
 		
 		//Logging disconnections of rejected clients
 		if(clientData.isRejected()) {
@@ -283,6 +295,7 @@ public class Server extends WebSocketServer {
 	public void onMessage(WebSocket conn, ByteBuffer message) {
 		//Getting the client's data
 		ClientData clientData = conn.getAttachment();
+		if(clientData == null) return;
 		
 		//Ignoring if this client is rejected
 		if(clientData.isRejected()) return;
@@ -303,7 +316,7 @@ public class Server extends WebSocketServer {
 	public void onError(WebSocket conn, Exception exception) {
 		if(conn != null) {
 			ClientData clientData = conn.getAttachment();
-			if(!clientData.isRejected()) {
+			if(clientData != null && !clientData.isRejected()) {
 				withSentryScopeGenerated(conn, clientData, () -> Main.getLogger().log(Level.WARNING, exception.getMessage(), exception));
 			}
 		}
