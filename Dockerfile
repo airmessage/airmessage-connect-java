@@ -23,4 +23,4 @@ RUN echo $WRITE_SERVER_CERTIFICATE | base64 --decode > $SERVER_CERTIFICATE
 RUN echo $WRITE_SENTRY_PROPERTIES_FILE | base64 --decode > $SENTRY_PROPERTIES_FILE
 
 #Run JAR
-CMD java -jar airmessage-connect.jar
+CMD java -jar airmessage-connect.jar insecure
