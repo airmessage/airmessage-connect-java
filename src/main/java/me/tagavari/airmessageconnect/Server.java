@@ -31,8 +31,8 @@ import java.util.stream.Stream;
 
 public class Server extends WebSocketServer {
 	//Creating the constants
-	//"web.airmessage.org", "localhost", or "app"
-	private static final Pattern originRegex = Pattern.compile("^(?:https://web\\.airmessage\\.org)|(?:https?://localhost(?::\\d+)?|(?:app))$");
+	//Any airmessage.org domain, "localhost", or "app"
+	private static final Pattern originRegex = Pattern.compile("^(?:https://(?:.+\\.)?.airmessage\\.org)|(?:https?://localhost(?::\\d+)?|(?:app))$");
 	
 	//Creating the state values
 	private final ConnectionCollection connectionCollection = new ConnectionCollection();
