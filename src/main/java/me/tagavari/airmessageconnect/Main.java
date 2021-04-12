@@ -3,12 +3,10 @@ package me.tagavari.airmessageconnect;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
-import io.sentry.*;
 import org.java_websocket.WebSocket;
 import org.java_websocket.server.CustomSSLWebSocketServerFactory;
 import org.java_websocket.server.WebSocketServer;
 
-import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import java.io.File;
@@ -59,36 +57,6 @@ public class Main {
 		} catch(IOException exception) {
 			Main.getLogger().log(Level.SEVERE, "Failed to initialize log file - continuing without saving logs to disk");
 		}
-		{
-			logger.addHandler(new Handler() {
-				@Override
-				public void publish(LogRecord record) {
-					if(record.getLevel() == Level.WARNING || record.getLevel() == Level.SEVERE) {
-						Throwable thrown = record.getThrown();
-						SentryLevel level = record.getLevel() == Level.SEVERE ? SentryLevel.FATAL : SentryLevel.WARNING;
-						if(thrown != null) {
-							SentryEvent event = new SentryEvent(thrown);
-							event.setLevel(level);
-							Sentry.captureEvent(event);
-						} else {
-							Sentry.captureMessage(loggerFormatter.formatMessage(record), level);
-						}
-					} else {
-						Sentry.addBreadcrumb(loggerFormatter.formatMessage(record));
-					}
-				}
-				
-				@Override
-				public void flush() {
-				
-				}
-				
-				@Override
-				public void close() throws SecurityException {
-				
-				}
-			});
-		}
 		
 		Main.getLogger().log(Level.INFO, "Starting AirMessage Connect version " + VERSION);
 		
@@ -108,11 +76,6 @@ public class Main {
 		}
 		
 		if(!isUnlinked() && !isInsecure()) {
-			//Initializing Sentry
-			Sentry.init(options -> {
-				options.setEnableExternalConfiguration(true);
-				options.setRelease("airmessage-connect@" + VERSION);
-			});
 			Main.getLogger().log(Level.INFO, "Sentry initialized");
 		}
 		
