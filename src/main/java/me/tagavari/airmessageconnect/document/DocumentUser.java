@@ -1,7 +1,5 @@
 package me.tagavari.airmessageconnect.document;
 
-import java.util.List;
-
 public class DocumentUser {
 	public final String relayID;
 	public final String installationID;
