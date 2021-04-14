@@ -3,12 +3,10 @@ package me.tagavari.airmessageconnect;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
-import io.sentry.*;
 import org.java_websocket.WebSocket;
 import org.java_websocket.server.CustomSSLWebSocketServerFactory;
 import org.java_websocket.server.WebSocketServer;
 
-import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import java.io.File;
@@ -24,7 +22,7 @@ import java.util.Date;
 import java.util.logging.*;
 
 public class Main {
-	public static final String VERSION = "1.0.2";
+	public static final String VERSION = "1.0.3";
 	private static final int port = 1259;
 	
 	private static final File logFile = new File("logs", "latest.log");
@@ -59,36 +57,6 @@ public class Main {
 		} catch(IOException exception) {
 			Main.getLogger().log(Level.SEVERE, "Failed to initialize log file - continuing without saving logs to disk");
 		}
-		{
-			logger.addHandler(new Handler() {
-				@Override
-				public void publish(LogRecord record) {
-					if(record.getLevel() == Level.WARNING || record.getLevel() == Level.SEVERE) {
-						Throwable thrown = record.getThrown();
-						SentryLevel level = record.getLevel() == Level.SEVERE ? SentryLevel.FATAL : SentryLevel.WARNING;
-						if(thrown != null) {
-							SentryEvent event = new SentryEvent(thrown);
-							event.setLevel(level);
-							Sentry.captureEvent(event);
-						} else {
-							Sentry.captureMessage(loggerFormatter.formatMessage(record), level);
-						}
-					} else {
-						Sentry.addBreadcrumb(loggerFormatter.formatMessage(record));
-					}
-				}
-				
-				@Override
-				public void flush() {
-				
-				}
-				
-				@Override
-				public void close() throws SecurityException {
-				
-				}
-			});
-		}
 		
 		Main.getLogger().log(Level.INFO, "Starting AirMessage Connect version " + VERSION);
 		
@@ -105,15 +73,6 @@ public class Main {
 			} else {
 				Main.getLogger().log(Level.INFO, "Unknown argument provided: " + argument);
 			}
-		}
-		
-		if(!isUnlinked() && !isInsecure()) {
-			//Initializing Sentry
-			Sentry.init(options -> {
-				options.setEnableExternalConfiguration(true);
-				options.setRelease("airmessage-connect@" + VERSION);
-			});
-			Main.getLogger().log(Level.INFO, "Sentry initialized");
 		}
 		
 		if(!isUnlinked()) {
