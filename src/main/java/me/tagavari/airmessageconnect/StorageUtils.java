@@ -15,10 +15,7 @@ public class StorageUtils {
 	
 	//Database structure
 	private static final String fieldUsersRelayID = "relayID";
-	private static final String fieldUsersServerInstallationID = "severID";
-	private static final String fieldUsersIsActivated = "isActivated";
-	//private static final String fieldUsersIsSubscribed = "isSubscribed";
-	//private static final String fieldUsersSubscriptionSource = "subscriptionSource";
+	private static final String fieldUsersServerInstallationID = "serverID";
 	
 	private static final String collectionUsersData = "data";
 	private static final String documentDataFCM = "fcm";
@@ -52,19 +49,14 @@ public class StorageUtils {
 	 */
 	public DocumentUser getDocumentUser(String userUID) throws ExecutionException, InterruptedException {
 		//Retrieving the user's document
-		DocumentSnapshot documentSnapshot = collectionUsers.document(userUID).get().get();
+		DocumentReference document = collectionUsers.document(userUID);
+		DocumentSnapshot documentSnapshot = document.get().get();
 		
 		//Returning if there is no document
 		if(!documentSnapshot.exists()) return null;
 		
-		//Returning the value
-		/* return new DocumentUser(documentSnapshot.getString(fieldUsersRelayID),
-				documentSnapshot.getString(fieldUsersServerInstallationID),
-				unboxBoolean(documentSnapshot.getBoolean(fieldUsersIsSubscribed)),
-				unboxInt(documentSnapshot.get(fieldUsersSubscriptionSource), 0)
-		); */
 		try {
-			return new DocumentUser(documentSnapshot.getString(fieldUsersRelayID), documentSnapshot.getString(fieldUsersServerInstallationID), unboxBoolean(documentSnapshot.getBoolean(fieldUsersIsActivated)));
+			return new DocumentUser(documentSnapshot.getString(fieldUsersRelayID), documentSnapshot.getString(fieldUsersServerInstallationID));
 		} catch(RuntimeException exception) {
 			Main.getLogger().log(Level.SEVERE, exception.getMessage(), exception);
 			return null;
@@ -124,22 +116,5 @@ public class StorageUtils {
 		
 		//Updating the user data
 		collectionUsers.document(userUID).set(update, SetOptions.merge()).get();
-	}
-	
-	/**
-	 * Checks if this user has an active subscription and can be provided service
-	 * @param userID The UID of the user to check
-	 * @return TRUE if this user has a subscription
-	 */
-	public boolean checkSubscription(String userID) throws ExecutionException, InterruptedException {
-		return true;
-	}
-	
-	private static boolean unboxBoolean(Boolean value) {
-		return value == null ? false : value;
-	}
-	
-	private static int unboxInt(Object value, int defaultValue) {
-		return value == null ? defaultValue : ((Number) value).intValue();
 	}
 }

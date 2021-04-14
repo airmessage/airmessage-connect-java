@@ -75,10 +75,6 @@ public class Main {
 			}
 		}
 		
-		if(!isUnlinked() && !isInsecure()) {
-			Main.getLogger().log(Level.INFO, "Sentry initialized");
-		}
-		
 		if(!isUnlinked()) {
 			//Initializing Firebase
 			try {

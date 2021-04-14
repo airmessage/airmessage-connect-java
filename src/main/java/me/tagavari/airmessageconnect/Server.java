@@ -22,15 +22,10 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.logging.Level;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class Server extends WebSocketServer {
-	//Creating the constants
-	//Any airmessage.org domain, "localhost", or "app"
-	private static final Pattern originRegex = Pattern.compile("^(?:https://(?:.+\\.)?airmessage\\.org)|(?:https?://localhost(?::\\d+)?|(?:app))$");
-	
 	//Creating the state values
 	private final ConnectionCollection connectionCollection = new ConnectionCollection();
 	
@@ -56,18 +51,6 @@ public class Server extends WebSocketServer {
 		
 		//Logging the event
 		Main.getLogger().log(Level.FINE, "Responding to handshake from client " + Main.connectionToString(conn));
-		
-		//Checking for an origin header header
-		if(!request.hasFieldValue("Origin")) {
-			Main.getLogger().log(Level.FINE, "Rejecting handshake (no origin) from client " + Main.connectionToString(conn));
-			throw new InvalidDataException(CloseFrame.PROTOCOL_ERROR);
-		}
-		
-		//Validating the origin
-		if(!originRegex.matcher(request.getFieldValue("Origin")).matches()) {
-			Main.getLogger().log(Level.FINE, "Rejecting handshake (bad origin - " + request.getFieldValue("Origin") + ") from client " + Main.connectionToString(conn));
-			throw new InvalidDataException(CloseFrame.PROTOCOL_ERROR);
-		}
 		
 		Map<String, String> queryParams;
 		{

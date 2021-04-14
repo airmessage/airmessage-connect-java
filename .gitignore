@@ -205,5 +205,5 @@ gradle-app.setting
 
 # End of https://www.gitignore.io/api/java,linux,macos,gradle,windows,intellij
 
-# Keys
-secure/
+# Log files
+/logs/

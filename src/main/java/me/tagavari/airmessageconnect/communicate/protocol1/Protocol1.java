@@ -30,12 +30,10 @@ import java.net.URLDecoder;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.ListIterator;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.logging.Level;
+import java.util.stream.Collectors;
 
 public class Protocol1 implements Protocol {
 	public static final int VERSION = 1;
@@ -179,6 +177,34 @@ public class Protocol1 implements Protocol {
 						break;
 					}
 					
+					Map<String, String> messageData;
+					if(bytes.remaining() > 0) {
+						//Reading the payload version code
+						int payloadVersion = bytes.getInt();
+						
+						//Reading the protocol version codes
+						int versionCount = bytes.getInt();
+						if(versionCount > 3) {
+							Main.getLogger().log(Level.INFO, "Ignoring FCM push request - Version count " + versionCount + " is too large");
+							break;
+						}
+						int[] versionCodes = new int[versionCount];
+						for(int i = 0; i < versionCount; i++) versionCodes[i] = bytes.getInt();
+						
+						//Reading the payload
+						byte[] payload = new byte[bytes.remaining()];
+						bytes.get(payload);
+						
+						//Setting the message data
+						messageData = Map.of(
+							"payload_version", Integer.toString(payloadVersion),
+							"protocol_version", Arrays.stream(versionCodes).mapToObj(String::valueOf).collect(Collectors.joining(".")),
+							"payload", Base64.getEncoder().encodeToString(payload)
+						);
+					} else {
+						messageData = Collections.emptyMap();
+					}
+					
 					//Getting the server' connection group
 					ConnectionGroup connectionGroup = clientData.getConnectionGroup();
 					
@@ -189,6 +215,7 @@ public class Protocol1 implements Protocol {
 							.addAllTokens(tokens)
 							.setAndroidConfig(AndroidConfig.builder()
 								.setPriority(AndroidConfig.Priority.HIGH)
+								.putAllData(messageData)
 								.build())
 							.build();
 					ApiFuture<BatchResponse> responseFuture = FirebaseMessaging.getInstance().sendMulticastAsync(message);
@@ -285,17 +312,12 @@ public class Protocol1 implements Protocol {
 						
 						//Fetching user details
 						DocumentUser documentUser = StorageUtils.instance().getDocumentUser(userID);
+						if(documentUser == null) documentUser = new DocumentUser(null, null);
 						
 						//Rejecting if this is installation ID out-of-date
-						if(documentUser == null || !installationID.equals(documentUser.installationID)) {
+						if(!installationID.equals(documentUser.installationID)) {
 							Main.getLogger().log(Level.WARNING, "Rejecting handshake (token refresh) from client " + Main.connectionToString(conn));
 							throw new InvalidDataException(SharedData.closeCodeServerTokenRefresh);
-						}
-						
-						//Rejecting if this user isn't activated
-						if(!checkActivation(documentUser)) {
-							Main.getLogger().log(Level.WARNING, "Rejecting handshake (account not activated) from client " + Main.connectionToString(conn));
-							throw new InvalidDataException(SharedData.closeCodeNoSubscription);
 						}
 						
 						//Updating the relay ID for this user (if necessary)
@@ -353,18 +375,6 @@ public class Protocol1 implements Protocol {
 				throw new InvalidDataException(SharedData.closeCodeAccountValidation);
 			}
 			
-			//Rejecting if this user doesn't have a subscription
-			/* if(!StorageUtils.instance().checkSubscription(userID)) {
-				Main.getLogger().log(Level.WARNING, "Rejecting handshake (no subscription) from client " + Main.connectionToString(conn));
-				throw new InvalidDataException(SharedData.closeCodeNoSubscription);
-			} */
-			
-			//Rejecting if this user isn't activated
-			if(!checkActivation(userID)) {
-				Main.getLogger().log(Level.WARNING, "Rejecting handshake (not activated) from client " + Main.connectionToString(conn));
-				throw new InvalidDataException(SharedData.closeCodeNoSubscription);
-			}
-			
 			//Returning the user's ID
 			return userID;
 		} else {
@@ -380,14 +390,6 @@ public class Protocol1 implements Protocol {
 				}
 			}
 		}
-	}
-	
-	private static boolean checkActivation(String userID) throws ExecutionException, InterruptedException {
-		return checkActivation(StorageUtils.instance().getDocumentUser(userID));
-	}
-	
-	private static boolean checkActivation(DocumentUser user) {
-		return user != null && user.isActivated;
 	}
 	
 	@Override
