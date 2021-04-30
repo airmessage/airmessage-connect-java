@@ -3,17 +3,24 @@
 AirMessage lets people use iMessage on the devices they like.
 **AirMessage Connect** is a proxy service designed to lower the barrier to entry for new users by removing the need for port forwarding, as well as enabling support for clients in more restrictive environments like web browsers.
 
+Other AirMessage repositories:
+[Server](https://github.com/airmessage/airmessage-server) |
+[Android](https://github.com/airmessage/airmessage-android) |
+[Web](https://github.com/airmessage/airmessage-web)
+
+## About this repository
+
 This repository holds a Java implementation of AirMessage's Connect protocol over WebSockets.
-It is less suitable for heavier workloads, but is rather designed to be used for developers to test their builds of AirMessage servers and clients over Connect.
+It is less suitable for heavier workloads, but is rather designed to be used by developers to test their builds of AirMessage servers and clients over Connect.
 
 Please note that this is the only purpose of this repository - to provide a public version of AirMessage Connect to developers.
 This repository will only be updated to maintain compatibility with any changes to AirMessage's Connect protocol.
 
 If you would simply like to test your build of an AirMessage client app over AirMessage Connect, you do not have to compile and run this program yourself.
-A public server running AirMessage Connect (community edition) is available at [connect-open.airmessage.org](wss://connect-open.airmessage.org) linked with a pre-configured Firebase project, and is available for anyone to use.
+A public server running AirMessage Connect (community edition) is available at `connect-open.airmessage.org` linked with a pre-configured Firebase project, and is available for anyone to use.
 A fresh build of any of AirMessage's open-source apps will connect to this endpoint by default.
 
-We kindly ask that you do not use AirMessage's official Connect servers with any unofficial builds of AirMessage-compatible software.
+We kindly ask that you do not use AirMessage's primary Connect servers with any unofficial builds of AirMessage-compatible software.
 
 ## Getting started
 
